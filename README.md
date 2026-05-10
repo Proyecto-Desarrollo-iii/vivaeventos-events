@@ -1,3 +1,4 @@
+
 # vivaeventos-events
 
 Microservicio de gestión de eventos para VivaEventos.
@@ -5,11 +6,13 @@ Microservicio de gestión de eventos para VivaEventos.
 ## Descripción
 
 Encargado de:
-- Creación, modificación y eliminación de eventos
-- Gestión de tipos de boleta (General, VIP, Estudiante)
-- Control de cupos y disponibilidad
-- Historial de cambios
-
+- Creación de eventos
+- Gestión de información básica del evento
+- Gestión de entradas y precios
+- Gestión de ubicación del evento
+- Gestión de información del artista y redes sociales
+- Publicación y despublicación de eventos
+-------
 ## Puerto
 
 ```
