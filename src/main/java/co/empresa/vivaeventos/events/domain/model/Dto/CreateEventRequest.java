@@ -7,6 +7,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 public class CreateEventRequest {
@@ -66,6 +67,14 @@ public class CreateEventRequest {
 
     @Size(max = 500, message = "La URL de Twitter/X no puede exceder 500 caracteres")
     private String twitterUrl;
+
+    private UUID organizerId;
+
+    @Size(max = 200, message = "La ciudad no puede exceder 200 caracteres")
+    private String city;
+
+    @Size(max = 500, message = "La ubicación no puede exceder 500 caracteres")
+    private String location;
 
     @Data
     public static class TicketRequest {

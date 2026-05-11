@@ -29,9 +29,6 @@ public class Event {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(nullable = false)
-    private LocalDateTime eventDate;
-
     @Column(name = "event_end_date")
     private LocalDateTime eventEndDate;
 
@@ -105,9 +102,6 @@ public class Event {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-        if (eventDate == null && eventDateTime != null) {
-            eventDate = eventDateTime;
-        }
         if (status == null) {
             status = "DRAFT";
         }
@@ -116,8 +110,5 @@ public class Event {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
-        if (eventDateTime != null && eventDate == null) {
-            eventDate = eventDateTime;
-        }
     }
 }

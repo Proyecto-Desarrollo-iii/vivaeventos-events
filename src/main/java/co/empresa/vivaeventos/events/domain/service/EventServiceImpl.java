@@ -6,6 +6,8 @@ import co.empresa.vivaeventos.events.domain.model.Dto.UpdateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.Event;
 import co.empresa.vivaeventos.events.domain.model.Ticket;
 import co.empresa.vivaeventos.events.domain.model.TicketCondition;
+import co.empresa.vivaeventos.events.domain.model.EventHistory;
+import co.empresa.vivaeventos.events.domain.repository.IEventHistoryRepository;
 import co.empresa.vivaeventos.events.domain.repository.IEventRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketConditionRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketRepository;
@@ -23,21 +25,24 @@ public class EventServiceImpl implements IEventService {
     private final IEventRepository eventRepository;
     private final ITicketRepository ticketRepository;
     private final ITicketConditionRepository conditionRepository;
+    private final IEventHistoryRepository historyRepository;
     private final TicketValidator ticketValidator;
 
     public EventServiceImpl(IEventRepository eventRepository,
                             ITicketRepository ticketRepository,
                             ITicketConditionRepository conditionRepository,
+                            IEventHistoryRepository historyRepository,
                             TicketValidator ticketValidator) {
         this.eventRepository = eventRepository;
         this.ticketRepository = ticketRepository;
         this.conditionRepository = conditionRepository;
+        this.historyRepository = historyRepository;
         this.ticketValidator = ticketValidator;
     }
 
     @Override
     @Transactional
-    public EventResponse createEvent(UUID organizerId, CreateEventRequest request) {
+    public EventResponse createEvent(UUID organizerId, String userEmail, CreateEventRequest request) {
         List<String> validationErrors = ticketValidator.validateTicketsForCreate(
                 request.getTickets(),
                 request.getEventDateTime()
@@ -61,6 +66,7 @@ public class EventServiceImpl implements IEventService {
         event.setLongitude(request.getLongitude());
         event.setMapsEmbedUrl(request.getMapsEmbedUrl());
         event.setMapsLinkUrl(request.getMapsLinkUrl());
+        event.setCity(request.getCity());
         event.setArtistName(request.getArtistName());
         event.setSpotifyUrl(request.getSpotifyUrl());
         event.setInstagramUrl(request.getInstagramUrl());
@@ -96,6 +102,9 @@ public class EventServiceImpl implements IEventService {
                 }
             }
         }
+
+        logEventChange(savedEvent.getId(), userEmail, "CREATED",
+                "Evento creado: " + savedEvent.getName(), null, eventToStateString(savedEvent));
 
         return mapEventToResponse(savedEvent);
     }
@@ -155,13 +164,15 @@ public class EventServiceImpl implements IEventService {
 
     @Override
     @Transactional
-    public EventResponse updateEvent(UUID eventId, UUID organizerId, UpdateEventRequest request) {
+    public EventResponse updateEvent(UUID eventId, UUID organizerId, String userEmail, UpdateEventRequest request) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Evento no encontrado: " + eventId));
 
         if (!event.getOrganizerId().equals(organizerId)) {
             throw new RuntimeException("No tienes permiso para actualizar este evento");
         }
+
+        String prevState = eventToStateString(event);
 
         if (request.getName() != null) event.setName(request.getName());
         if (request.getDescription() != null) event.setDescription(request.getDescription());
@@ -179,6 +190,8 @@ public class EventServiceImpl implements IEventService {
         if (request.getSpotifyUrl() != null) event.setSpotifyUrl(request.getSpotifyUrl());
         if (request.getInstagramUrl() != null) event.setInstagramUrl(request.getInstagramUrl());
         if (request.getTwitterUrl() != null) event.setTwitterUrl(request.getTwitterUrl());
+        if (request.getCity() != null) event.setCity(request.getCity());
+        if (request.getLocation() != null) event.setLocation(request.getLocation());
         if (request.getIsPublished() != null) event.setIsPublished(request.getIsPublished());
 
         if (request.getTickets() != null && !request.getTickets().isEmpty()) {
@@ -224,12 +237,14 @@ public class EventServiceImpl implements IEventService {
         }
 
         Event updatedEvent = eventRepository.save(event);
+        logEventChange(eventId, userEmail, "UPDATED",
+                "Evento actualizado: " + updatedEvent.getName(), prevState, eventToStateString(updatedEvent));
         return mapEventToResponse(updatedEvent);
     }
 
     @Override
     @Transactional
-    public void publishEvent(UUID eventId, UUID organizerId) {
+    public void publishEvent(UUID eventId, UUID organizerId, String userEmail) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Evento no encontrado: " + eventId));
 
@@ -242,13 +257,17 @@ public class EventServiceImpl implements IEventService {
             throw new RuntimeException("No se puede publicar el evento: " + String.join("; ", publishErrors));
         }
 
+        String prevState = eventToStateString(event);
         event.setIsPublished(true);
+        event.setStatus("PUBLISHED");
         eventRepository.save(event);
+        logEventChange(eventId, userEmail, "PUBLISHED",
+                "Evento publicado: " + event.getName(), prevState, eventToStateString(event));
     }
 
     @Override
     @Transactional
-    public void unpublishEvent(UUID eventId, UUID organizerId) {
+    public void unpublishEvent(UUID eventId, UUID organizerId, String userEmail) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Evento no encontrado: " + eventId));
 
@@ -256,19 +275,27 @@ public class EventServiceImpl implements IEventService {
             throw new RuntimeException("No tienes permiso para despublicar este evento");
         }
 
+        String prevState = eventToStateString(event);
         event.setIsPublished(false);
+        event.setStatus("DRAFT");
         eventRepository.save(event);
+        logEventChange(eventId, userEmail, "UNPUBLISHED",
+                "Evento despublicado: " + event.getName(), prevState, eventToStateString(event));
     }
 
     @Override
     @Transactional
-    public void deleteEvent(UUID eventId, UUID organizerId) {
+    public void deleteEvent(UUID eventId, UUID organizerId, String userEmail) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Evento no encontrado: " + eventId));
 
         if (!event.getOrganizerId().equals(organizerId)) {
             throw new RuntimeException("No tienes permiso para eliminar este evento");
         }
+
+        String prevState = eventToStateString(event);
+        logEventChange(eventId, userEmail, "DELETED",
+                "Evento eliminado: " + event.getName(), prevState, null);
 
         List<Ticket> tickets = ticketRepository.findByEventId(eventId);
         for (Ticket ticket : tickets) {
@@ -281,7 +308,7 @@ public class EventServiceImpl implements IEventService {
 
     @Override
     @Transactional
-    public void deactivateEvent(UUID eventId, UUID organizerId) {
+    public void deactivateEvent(UUID eventId, UUID organizerId, String userEmail) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Evento no encontrado: " + eventId));
 
@@ -289,8 +316,12 @@ public class EventServiceImpl implements IEventService {
             throw new RuntimeException("No tienes permiso para desactivar este evento");
         }
 
+        String prevState = eventToStateString(event);
         event.setIsActive(false);
+        event.setStatus("DEACTIVATED");
         eventRepository.save(event);
+        logEventChange(eventId, userEmail, "DEACTIVATED",
+                "Evento desactivado: " + event.getName(), prevState, eventToStateString(event));
     }
 
     @Override
@@ -367,6 +398,9 @@ public class EventServiceImpl implements IEventService {
         response.setSpotifyUrl(event.getSpotifyUrl());
         response.setInstagramUrl(event.getInstagramUrl());
         response.setTwitterUrl(event.getTwitterUrl());
+        response.setCity(event.getCity());
+        response.setLocation(event.getLocation());
+        response.setStatus(event.getStatus());
         response.setIsPublished(event.getIsPublished());
         response.setIsActive(event.getIsActive());
         response.setCreatedAt(event.getCreatedAt());
@@ -374,6 +408,29 @@ public class EventServiceImpl implements IEventService {
         response.setTickets(ticketResponses);
 
         return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EventHistory> getEventHistory(UUID eventId) {
+        return historyRepository.findByEventIdOrderByCreatedAtDesc(eventId);
+    }
+
+    private void logEventChange(UUID eventId, String userEmail, String action, String description, String previousState, String newState) {
+        EventHistory history = new EventHistory();
+        history.setEventId(eventId);
+        history.setUserEmail(userEmail);
+        history.setAction(action);
+        history.setDescription(description);
+        history.setPreviousState(previousState);
+        history.setNewState(newState);
+        historyRepository.save(history);
+    }
+
+    private String eventToStateString(Event event) {
+        return String.format("name=%s, category=%s, date=%s, venue=%s, published=%s, active=%s",
+                event.getName(), event.getCategory(), event.getEventDateTime(),
+                event.getVenueName(), event.getIsPublished(), event.getIsActive());
     }
 
     public record EventSummary(

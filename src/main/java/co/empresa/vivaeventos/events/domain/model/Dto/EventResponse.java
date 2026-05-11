@@ -32,6 +32,9 @@ public class EventResponse {
     private String spotifyUrl;
     private String instagramUrl;
     private String twitterUrl;
+    private String city;
+    private String location;
+    private String status;
     private Boolean isPublished;
     private Boolean isActive;
     private LocalDateTime createdAt;

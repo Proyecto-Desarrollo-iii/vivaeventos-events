@@ -7,6 +7,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 public class UpdateEventRequest {
@@ -64,5 +65,8 @@ public class UpdateEventRequest {
     @Size(max = 500, message = "La URL de Twitter/X no puede exceder 500 caracteres")
     private String twitterUrl;
 
+    private String city;
+    private String location;
+    private UUID organizerId;
     private Boolean isPublished;
 }
