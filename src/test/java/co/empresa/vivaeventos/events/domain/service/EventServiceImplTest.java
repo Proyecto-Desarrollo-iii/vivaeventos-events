@@ -5,12 +5,15 @@ import co.empresa.vivaeventos.events.domain.model.Ticket;
 import co.empresa.vivaeventos.events.domain.model.Dto.CreateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.Dto.EventResponse;
 import co.empresa.vivaeventos.events.domain.repository.IEventRepository;
+import co.empresa.vivaeventos.events.domain.repository.ITicketConditionRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -22,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class EventServiceImplTest {
 
     @Mock
@@ -30,11 +34,17 @@ class EventServiceImplTest {
     @Mock
     private ITicketRepository ticketRepository;
 
+    @Mock
+    private ITicketConditionRepository conditionRepository;
+
+    @Mock
+    private TicketValidator ticketValidator;
+
     private EventServiceImpl eventService;
 
     @BeforeEach
     void setUp() {
-        eventService = new EventServiceImpl(eventRepository, ticketRepository);
+        eventService = new EventServiceImpl(eventRepository, ticketRepository, conditionRepository, ticketValidator);
     }
 
     @Test
@@ -58,6 +68,8 @@ class EventServiceImplTest {
 
         when(eventRepository.save(any(Event.class))).thenReturn(savedEvent);
         when(ticketRepository.findByEventId(savedEvent.getId())).thenReturn(java.util.Collections.emptyList());
+        when(conditionRepository.findByTicketId(any())).thenReturn(java.util.Collections.emptyList());
+        when(ticketValidator.validateTicketsForCreate(any(), any())).thenReturn(java.util.Collections.emptyList());
 
         EventResponse response = eventService.createEvent(organizerId, request);
 
@@ -77,6 +89,7 @@ class EventServiceImplTest {
 
         when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
         when(ticketRepository.findByEventId(eventId)).thenReturn(java.util.Collections.emptyList());
+        when(conditionRepository.findByTicketId(any())).thenReturn(java.util.Collections.emptyList());
 
         EventResponse response = eventService.getEventById(eventId);
 
@@ -103,12 +116,19 @@ class EventServiceImplTest {
         event.setOrganizerId(organizerId);
         event.setIsPublished(false);
 
+        Ticket ticket = new Ticket();
+        ticket.setId(UUID.randomUUID());
+        ticket.setEventId(eventId);
+        ticket.setPrice(new BigDecimal("100.00"));
+
         when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+        when(ticketRepository.findByEventId(eventId)).thenReturn(java.util.List.of(ticket));
         when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> {
             Event e = invocation.getArgument(0);
             e.setIsPublished(true);
             return e;
         });
+        when(ticketValidator.validateEventForPublishing(eventId, organizerId)).thenReturn(java.util.Collections.emptyList());
 
         eventService.publishEvent(eventId, organizerId);
 

@@ -3,7 +3,9 @@ package co.empresa.vivaeventos.events.delivery.rest;
 import co.empresa.vivaeventos.events.domain.model.Dto.CreateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.Dto.EventResponse;
 import co.empresa.vivaeventos.events.domain.model.Dto.UpdateEventRequest;
+import co.empresa.vivaeventos.events.domain.service.EventServiceImpl;
 import co.empresa.vivaeventos.events.domain.service.IEventService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -47,10 +49,9 @@ public class EventController {
     }*/
     @PostMapping
     public ResponseEntity<Map<String, Object>> createEvent(
-            @RequestBody CreateEventRequest request) {
+            @Valid @RequestBody CreateEventRequest request) {
 
         try {
-
             UUID orgId = UUID.randomUUID();
 
             EventResponse eventResponse =
@@ -62,13 +63,12 @@ public class EventController {
 
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
 
-        } catch (Exception e) {
-
+        } catch (RuntimeException e) {
             Map<String, Object> error = new HashMap<>();
             error.put("error", e.getMessage());
 
             return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .status(HttpStatus.BAD_REQUEST)
                     .body(error);
         }
     }
@@ -158,7 +158,7 @@ public class EventController {
     public ResponseEntity<Map<String, Object>> updateEvent(
             Authentication authentication,
             @PathVariable UUID eventId,
-            @RequestBody UpdateEventRequest request) {
+            @Valid @RequestBody UpdateEventRequest request) {
         try {
             UUID organizerId = UUID.fromString(extractUserIdFromToken(authentication));
 
@@ -172,7 +172,7 @@ public class EventController {
         } catch (RuntimeException e) {
             Map<String, Object> error = new HashMap<>();
             error.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         }
     }
 
@@ -253,6 +253,22 @@ public class EventController {
             Map<String, Object> error = new HashMap<>();
             error.put("error", e.getMessage());
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+        }
+    }
+
+    @GetMapping("/{eventId}/resumen-cupos")
+    public ResponseEntity<Map<String, Object>> getEventSummary(@PathVariable UUID eventId) {
+        try {
+            EventServiceImpl.EventSummary summary = eventService.getEventSummary(eventId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("resumen", summary);
+
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
         }
     }
 

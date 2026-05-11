@@ -1,11 +1,13 @@
 package co.empresa.vivaeventos.events.domain.service;
 
-import co.empresa.vivaeventos.events.domain.model.Event;
-import co.empresa.vivaeventos.events.domain.model.Ticket;
 import co.empresa.vivaeventos.events.domain.model.Dto.CreateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.Dto.EventResponse;
 import co.empresa.vivaeventos.events.domain.model.Dto.UpdateEventRequest;
+import co.empresa.vivaeventos.events.domain.model.Event;
+import co.empresa.vivaeventos.events.domain.model.Ticket;
+import co.empresa.vivaeventos.events.domain.model.TicketCondition;
 import co.empresa.vivaeventos.events.domain.repository.IEventRepository;
+import co.empresa.vivaeventos.events.domain.repository.ITicketConditionRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,15 +22,31 @@ public class EventServiceImpl implements IEventService {
 
     private final IEventRepository eventRepository;
     private final ITicketRepository ticketRepository;
+    private final ITicketConditionRepository conditionRepository;
+    private final TicketValidator ticketValidator;
 
-    public EventServiceImpl(IEventRepository eventRepository, ITicketRepository ticketRepository) {
+    public EventServiceImpl(IEventRepository eventRepository,
+                            ITicketRepository ticketRepository,
+                            ITicketConditionRepository conditionRepository,
+                            TicketValidator ticketValidator) {
         this.eventRepository = eventRepository;
         this.ticketRepository = ticketRepository;
+        this.conditionRepository = conditionRepository;
+        this.ticketValidator = ticketValidator;
     }
 
     @Override
     @Transactional
     public EventResponse createEvent(UUID organizerId, CreateEventRequest request) {
+        List<String> validationErrors = ticketValidator.validateTicketsForCreate(
+                request.getTickets(),
+                request.getEventDateTime()
+        );
+
+        if (!validationErrors.isEmpty()) {
+            throw new RuntimeException("Errores de validacion: " + String.join("; ", validationErrors));
+        }
+
         Event event = new Event();
         event.setOrganizerId(organizerId);
         event.setName(request.getName());
@@ -47,14 +65,14 @@ public class EventServiceImpl implements IEventService {
         event.setSpotifyUrl(request.getSpotifyUrl());
         event.setInstagramUrl(request.getInstagramUrl());
         event.setTwitterUrl(request.getTwitterUrl());
-        event.setIsPublished(true);
+        event.setIsPublished(false);
         event.setIsActive(true);
+        event.setStatus("DRAFT");
 
         Event savedEvent = eventRepository.save(event);
 
-        // Crear tickets asociados
         if (request.getTickets() != null && !request.getTickets().isEmpty()) {
-            request.getTickets().forEach(ticketReq -> {
+            for (CreateEventRequest.TicketRequest ticketReq : request.getTickets()) {
                 Ticket ticket = new Ticket();
                 ticket.setEventId(savedEvent.getId());
                 ticket.setType(ticketReq.getType());
@@ -63,8 +81,20 @@ public class EventServiceImpl implements IEventService {
                 ticket.setCapacity(ticketReq.getCapacity());
                 ticket.setSoldCount(0);
                 ticket.setIsActive(true);
-                ticketRepository.save(ticket);
-            });
+
+                Ticket savedTicket = ticketRepository.save(ticket);
+
+                if (ticketReq.getConditions() != null && !ticketReq.getConditions().isEmpty()) {
+                    for (CreateEventRequest.TicketRequest.ConditionRequest condReq : ticketReq.getConditions()) {
+                        TicketCondition condition = new TicketCondition();
+                        condition.setTicketId(savedTicket.getId());
+                        condition.setType(condReq.getType().toUpperCase());
+                        condition.setValue(condReq.getValue());
+                        condition.setIsActive(condReq.getIsActive() != null ? condReq.getIsActive() : true);
+                        conditionRepository.save(condition);
+                    }
+                }
+            }
         }
 
         return mapEventToResponse(savedEvent);
@@ -151,13 +181,24 @@ public class EventServiceImpl implements IEventService {
         if (request.getTwitterUrl() != null) event.setTwitterUrl(request.getTwitterUrl());
         if (request.getIsPublished() != null) event.setIsPublished(request.getIsPublished());
 
-        // Actualizar tickets si se proporcionan
         if (request.getTickets() != null && !request.getTickets().isEmpty()) {
-            // Eliminar tickets anteriores
-            ticketRepository.findByEventId(eventId).forEach(ticketRepository::delete);
+            List<String> validationErrors = ticketValidator.validateTicketsForUpdate(
+                    request.getTickets(),
+                    eventId,
+                    event.getEventDateTime()
+            );
 
-            // Crear nuevos tickets
-            request.getTickets().forEach(ticketReq -> {
+            if (!validationErrors.isEmpty()) {
+                throw new RuntimeException("Errores de validacion: " + String.join("; ", validationErrors));
+            }
+
+            List<Ticket> existingTickets = ticketRepository.findByEventId(eventId);
+            for (Ticket existingTicket : existingTickets) {
+                conditionRepository.deleteByTicketId(existingTicket.getId());
+            }
+            ticketRepository.deleteAll(existingTickets);
+
+            for (CreateEventRequest.TicketRequest ticketReq : request.getTickets()) {
                 Ticket ticket = new Ticket();
                 ticket.setEventId(eventId);
                 ticket.setType(ticketReq.getType());
@@ -166,8 +207,20 @@ public class EventServiceImpl implements IEventService {
                 ticket.setCapacity(ticketReq.getCapacity());
                 ticket.setSoldCount(0);
                 ticket.setIsActive(true);
-                ticketRepository.save(ticket);
-            });
+
+                Ticket savedTicket = ticketRepository.save(ticket);
+
+                if (ticketReq.getConditions() != null && !ticketReq.getConditions().isEmpty()) {
+                    for (CreateEventRequest.TicketRequest.ConditionRequest condReq : ticketReq.getConditions()) {
+                        TicketCondition condition = new TicketCondition();
+                        condition.setTicketId(savedTicket.getId());
+                        condition.setType(condReq.getType().toUpperCase());
+                        condition.setValue(condReq.getValue());
+                        condition.setIsActive(condReq.getIsActive() != null ? condReq.getIsActive() : true);
+                        conditionRepository.save(condition);
+                    }
+                }
+            }
         }
 
         Event updatedEvent = eventRepository.save(event);
@@ -182,6 +235,11 @@ public class EventServiceImpl implements IEventService {
 
         if (!event.getOrganizerId().equals(organizerId)) {
             throw new RuntimeException("No tienes permiso para publicar este evento");
+        }
+
+        List<String> publishErrors = ticketValidator.validateEventForPublishing(eventId, organizerId);
+        if (!publishErrors.isEmpty()) {
+            throw new RuntimeException("No se puede publicar el evento: " + String.join("; ", publishErrors));
         }
 
         event.setIsPublished(true);
@@ -212,10 +270,12 @@ public class EventServiceImpl implements IEventService {
             throw new RuntimeException("No tienes permiso para eliminar este evento");
         }
 
-        // Eliminar tickets asociados
-        ticketRepository.findByEventId(eventId).forEach(ticketRepository::delete);
+        List<Ticket> tickets = ticketRepository.findByEventId(eventId);
+        for (Ticket ticket : tickets) {
+            conditionRepository.deleteByTicketId(ticket.getId());
+        }
 
-        // Eliminar evento
+        ticketRepository.deleteAll(tickets);
         eventRepository.delete(event);
     }
 
@@ -233,19 +293,59 @@ public class EventServiceImpl implements IEventService {
         eventRepository.save(event);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public EventSummary getEventSummary(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new RuntimeException("Evento no encontrado: " + eventId));
+
+        List<Ticket> tickets = ticketRepository.findByEventId(eventId);
+
+        int totalCapacity = tickets.stream().mapToInt(Ticket::getCapacity).sum();
+        int totalSold = tickets.stream().mapToInt(Ticket::getSoldCount).sum();
+        int totalAvailable = totalCapacity - totalSold;
+        int ticketTypes = tickets.size();
+
+        return new EventSummary(
+                eventId,
+                event.getName(),
+                totalCapacity,
+                totalSold,
+                totalAvailable,
+                ticketTypes,
+                tickets.stream().anyMatch(t -> t.getCapacity() - t.getSoldCount() <= 0)
+        );
+    }
+
     private EventResponse mapEventToResponse(Event event) {
         List<Ticket> tickets = ticketRepository.findByEventId(event.getId());
         List<EventResponse.TicketResponse> ticketResponses = tickets.stream()
-                .map(t -> new EventResponse.TicketResponse(
-                        t.getId(),
-                        t.getEventId(),
-                        t.getType(),
-                        t.getDescription(),
-                        t.getPrice(),
-                        t.getCapacity(),
-                        t.getSoldCount(),
-                        t.getIsActive()
-                ))
+                .map(t -> {
+                    List<TicketCondition> conditions = conditionRepository.findByTicketId(t.getId());
+                    List<EventResponse.ConditionResponse> conditionResponses = conditions.stream()
+                            .map(c -> {
+                                EventResponse.ConditionResponse cr = new EventResponse.ConditionResponse();
+                                cr.setId(c.getId());
+                                cr.setTicketId(c.getTicketId());
+                                cr.setType(c.getType());
+                                cr.setValue(c.getValue());
+                                cr.setIsActive(c.getIsActive());
+                                return cr;
+                            })
+                            .toList();
+
+                    EventResponse.TicketResponse tr = new EventResponse.TicketResponse();
+                    tr.setId(t.getId());
+                    tr.setEventId(t.getEventId());
+                    tr.setType(t.getType());
+                    tr.setDescription(t.getDescription());
+                    tr.setPrice(t.getPrice());
+                    tr.setCapacity(t.getCapacity());
+                    tr.setSoldCount(t.getSoldCount());
+                    tr.setIsActive(t.getIsActive());
+                    tr.setConditions(conditionResponses);
+                    return tr;
+                })
                 .collect(Collectors.toList());
 
         EventResponse response = new EventResponse();
@@ -275,4 +375,14 @@ public class EventServiceImpl implements IEventService {
 
         return response;
     }
+
+    public record EventSummary(
+            UUID eventId,
+            String eventName,
+            Integer totalCapacity,
+            Integer totalSold,
+            Integer totalAvailable,
+            Integer ticketTypes,
+            Boolean hasSoldOutTickets
+    ) {}
 }

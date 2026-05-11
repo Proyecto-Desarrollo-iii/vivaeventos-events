@@ -20,6 +20,9 @@ public class Event {
     @Column(name = "organizer_id", nullable = false)
     private UUID organizerId;
 
+    @Column(name = "venue_id")
+    private UUID venueId;
+
     @Column(nullable = false)
     private String name;
 
@@ -27,23 +30,39 @@ public class Event {
     private String description;
 
     @Column(nullable = false)
-    private String category;
+    private LocalDateTime eventDate;
+
+    @Column(name = "event_end_date")
+    private LocalDateTime eventEndDate;
 
     @Column(name = "event_date_time", nullable = false)
     private LocalDateTime eventDateTime;
 
-    // MATERIAL VISUAL
-    @Column(name = "banner_url", columnDefinition = "TEXT")
+    @Column(length = 500)
+    private String location;
+
+    @Column(length = 100)
+    private String city;
+
+    @Column(name = "banner_url", length = 500)
     private String bannerUrl;
+
+    @Column(length = 50)
+    private String status = "DRAFT";
+
+    @Column(nullable = false)
+    private String category;
+
+    @Column(name = "age_restriction")
+    private Integer ageRestriction = 0;
 
     @Column(name = "thumbnail_url", columnDefinition = "TEXT")
     private String thumbnailUrl;
 
-    // UBICACION
-    @Column(name = "venue_name")
+    @Column(name = "venue_name", length = 255)
     private String venueName;
 
-    @Column(name = "address")
+    @Column(length = 255)
     private String address;
 
     @Column(name = "latitude")
@@ -58,8 +77,7 @@ public class Event {
     @Column(name = "maps_link_url", columnDefinition = "TEXT")
     private String mapsLinkUrl;
 
-    // ARTISTA Y RRSS
-    @Column(name = "artist_name")
+    @Column(name = "artist_name", length = 255)
     private String artistName;
 
     @Column(name = "spotify_url", columnDefinition = "TEXT")
@@ -87,10 +105,19 @@ public class Event {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        if (eventDate == null && eventDateTime != null) {
+            eventDate = eventDateTime;
+        }
+        if (status == null) {
+            status = "DRAFT";
+        }
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+        if (eventDateTime != null && eventDate == null) {
+            eventDate = eventDateTime;
+        }
     }
 }

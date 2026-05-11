@@ -32,4 +32,6 @@ public interface IEventService {
     void deleteEvent(UUID eventId, UUID organizerId);
 
     void deactivateEvent(UUID eventId, UUID organizerId);
+
+    EventServiceImpl.EventSummary getEventSummary(UUID eventId);
 }
