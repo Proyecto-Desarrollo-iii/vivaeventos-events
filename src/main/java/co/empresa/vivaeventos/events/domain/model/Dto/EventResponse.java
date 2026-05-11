@@ -50,5 +50,17 @@ public class EventResponse {
         private Integer capacity;
         private Integer soldCount;
         private Boolean isActive;
+        private List<ConditionResponse> conditions;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class ConditionResponse {
+        private UUID id;
+        private UUID ticketId;
+        private String type;
+        private String value;
+        private Boolean isActive;
     }
 }
