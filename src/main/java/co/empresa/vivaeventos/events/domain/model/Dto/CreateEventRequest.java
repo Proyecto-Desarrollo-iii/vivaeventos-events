@@ -76,6 +76,8 @@ public class CreateEventRequest {
     @Size(max = 500, message = "La ubicación no puede exceder 500 caracteres")
     private String location;
 
+    private Boolean isPublished;
+
     @Data
     public static class TicketRequest {
         @NotBlank(message = "El tipo de boleta es requerido")

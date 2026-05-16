@@ -71,9 +71,9 @@ public class EventServiceImpl implements IEventService {
         event.setSpotifyUrl(request.getSpotifyUrl());
         event.setInstagramUrl(request.getInstagramUrl());
         event.setTwitterUrl(request.getTwitterUrl());
-        event.setIsPublished(false);
+        event.setIsPublished(request.getIsPublished() != null ? request.getIsPublished() : true);
         event.setIsActive(true);
-        event.setStatus("DRAFT");
+        event.setStatus(request.getIsPublished() == false ? "DRAFT" : "PUBLISHED");
 
         Event savedEvent = eventRepository.save(event);
 
@@ -192,7 +192,10 @@ public class EventServiceImpl implements IEventService {
         if (request.getTwitterUrl() != null) event.setTwitterUrl(request.getTwitterUrl());
         if (request.getCity() != null) event.setCity(request.getCity());
         if (request.getLocation() != null) event.setLocation(request.getLocation());
-        if (request.getIsPublished() != null) event.setIsPublished(request.getIsPublished());
+        if (request.getIsPublished() != null) {
+            event.setIsPublished(request.getIsPublished());
+            event.setStatus(request.getIsPublished() ? "PUBLISHED" : "DRAFT");
+        }
 
         if (request.getTickets() != null && !request.getTickets().isEmpty()) {
             List<String> validationErrors = ticketValidator.validateTicketsForUpdate(
