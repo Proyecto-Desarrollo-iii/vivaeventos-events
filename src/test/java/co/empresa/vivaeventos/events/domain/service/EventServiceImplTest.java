@@ -59,6 +59,7 @@ class EventServiceImplTest {
         request.setDescription("Test Description");
         request.setCategory("musica");
         request.setEventDateTime(LocalDateTime.now().plusDays(7));
+        request.setIsPublished(false);
 
         Event savedEvent = new Event();
         savedEvent.setId(UUID.randomUUID());
