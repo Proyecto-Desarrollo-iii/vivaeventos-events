@@ -68,6 +68,9 @@ public class CreateEventRequest {
     @Size(max = 500, message = "La URL de Twitter/X no puede exceder 500 caracteres")
     private String twitterUrl;
 
+    @Size(max = 5000, message = "Los enlaces de redes sociales no pueden exceder 5000 caracteres")
+    private String socialLinks;
+
     private UUID organizerId;
 
     @Size(max = 200, message = "La ciudad no puede exceder 200 caracteres")

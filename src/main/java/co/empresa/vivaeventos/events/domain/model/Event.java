@@ -86,6 +86,9 @@ public class Event {
     @Column(name = "twitter_url", columnDefinition = "TEXT")
     private String twitterUrl;
 
+    @Column(name = "social_links", columnDefinition = "TEXT")
+    private String socialLinks;
+
     @Column(name = "is_published")
     private Boolean isPublished = false;
 

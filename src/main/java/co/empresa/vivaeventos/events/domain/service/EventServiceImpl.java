@@ -71,6 +71,7 @@ public class EventServiceImpl implements IEventService {
         event.setSpotifyUrl(request.getSpotifyUrl());
         event.setInstagramUrl(request.getInstagramUrl());
         event.setTwitterUrl(request.getTwitterUrl());
+        event.setSocialLinks(request.getSocialLinks());
         event.setIsPublished(request.getIsPublished() != null ? request.getIsPublished() : true);
         event.setIsActive(true);
         event.setStatus(request.getIsPublished() == false ? "DRAFT" : "PUBLISHED");
@@ -190,6 +191,7 @@ public class EventServiceImpl implements IEventService {
         if (request.getSpotifyUrl() != null) event.setSpotifyUrl(request.getSpotifyUrl());
         if (request.getInstagramUrl() != null) event.setInstagramUrl(request.getInstagramUrl());
         if (request.getTwitterUrl() != null) event.setTwitterUrl(request.getTwitterUrl());
+        if (request.getSocialLinks() != null) event.setSocialLinks(request.getSocialLinks());
         if (request.getCity() != null) event.setCity(request.getCity());
         if (request.getLocation() != null) event.setLocation(request.getLocation());
         if (request.getIsPublished() != null) {
@@ -401,6 +403,7 @@ public class EventServiceImpl implements IEventService {
         response.setSpotifyUrl(event.getSpotifyUrl());
         response.setInstagramUrl(event.getInstagramUrl());
         response.setTwitterUrl(event.getTwitterUrl());
+        response.setSocialLinks(event.getSocialLinks());
         response.setCity(event.getCity());
         response.setLocation(event.getLocation());
         response.setStatus(event.getStatus());
