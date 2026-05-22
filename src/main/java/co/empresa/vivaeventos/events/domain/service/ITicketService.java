@@ -24,4 +24,6 @@ public interface ITicketService {
     void removeCondition(UUID conditionId);
 
     TicketServiceImpl.QuotaInfo getQuotaInfo(UUID ticketId);
+
+    void incrementSoldCount(UUID ticketId, int quantity);
 }

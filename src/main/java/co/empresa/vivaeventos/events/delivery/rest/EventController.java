@@ -6,6 +6,7 @@ import co.empresa.vivaeventos.events.domain.model.Dto.UpdateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.EventHistory;
 import co.empresa.vivaeventos.events.domain.service.EventServiceImpl;
 import co.empresa.vivaeventos.events.domain.service.IEventService;
+import co.empresa.vivaeventos.events.domain.service.ITicketService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,9 +22,11 @@ import java.util.UUID;
 public class EventController {
 
     private final IEventService eventService;
+    private final ITicketService ticketService;
 
-    public EventController(IEventService eventService) {
+    public EventController(IEventService eventService, ITicketService ticketService) {
         this.eventService = eventService;
+        this.ticketService = ticketService;
     }
 
   /*  @PostMapping
@@ -288,6 +291,24 @@ public class EventController {
             Map<String, Object> error = new HashMap<>();
             error.put("error", e.getMessage());
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+        }
+    }
+
+    @PostMapping("/tickets/{ticketId}/vender")
+    public ResponseEntity<Map<String, Object>> incrementTicketSales(
+            @PathVariable UUID ticketId,
+            @RequestBody Map<String, Integer> body) {
+        try {
+            int quantity = body.getOrDefault("cantidad", 1);
+            ticketService.incrementSoldCount(ticketId, quantity);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("mensaje", "Venta registrada exitosamente");
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         }
     }
 
