@@ -27,17 +27,23 @@ public class EventServiceImpl implements IEventService {
     private final ITicketConditionRepository conditionRepository;
     private final IEventHistoryRepository historyRepository;
     private final TicketValidator ticketValidator;
+    private final co.empresa.vivaeventos.events.config.NotificationsClient notificationsClient;
+    private final co.empresa.vivaeventos.events.config.TicketsClient ticketsClient;
 
     public EventServiceImpl(IEventRepository eventRepository,
-                            ITicketRepository ticketRepository,
-                            ITicketConditionRepository conditionRepository,
-                            IEventHistoryRepository historyRepository,
-                            TicketValidator ticketValidator) {
+                                ITicketRepository ticketRepository,
+                                ITicketConditionRepository conditionRepository,
+                                IEventHistoryRepository historyRepository,
+                                TicketValidator ticketValidator,
+                                co.empresa.vivaeventos.events.config.NotificationsClient notificationsClient,
+                                co.empresa.vivaeventos.events.config.TicketsClient ticketsClient) {
         this.eventRepository = eventRepository;
         this.ticketRepository = ticketRepository;
         this.conditionRepository = conditionRepository;
         this.historyRepository = historyRepository;
         this.ticketValidator = ticketValidator;
+        this.notificationsClient = notificationsClient;
+        this.ticketsClient = ticketsClient;
     }
 
     @Override
@@ -244,7 +250,37 @@ public class EventServiceImpl implements IEventService {
         Event updatedEvent = eventRepository.save(event);
         logEventChange(eventId, userEmail, "UPDATED",
                 "Evento actualizado: " + updatedEvent.getName(), prevState, eventToStateString(updatedEvent));
+
+        // Notificar a los usuarios que tienen boletas
+        try {
+            java.util.List<Map<String, Object>> issuedTickets = ticketsClient.getIssuedTicketsByEvent(eventId);
+            if (issuedTickets != null && !issuedTickets.isEmpty()) {
+                for (Map<String, Object> ticket : issuedTickets) {
+                    UUID userId = UUID.fromString(String.valueOf(ticket.get("userId")));
+                    String holderEmail = (String) ticket.get("holderEmail");
+                    if (holderEmail == null) holderEmail = "";
+                    
+                    Map<String, String> placeholders = new java.util.HashMap<>();
+                    placeholders.put("eventName", updatedEvent.getName());
+                    placeholders.put("newDate", updatedEvent.getEventDateTime().toString());
+                    placeholders.put("newVenue", updatedEvent.getVenueName());
+                    
+                    notificationsClient.sendNotification(userId, holderEmail, "EVENT_UPDATED", "EMAIL", placeholders);
+                }
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
+                .error("Failed to send update notifications for event {}: {}", eventId, e.getMessage());
+        }
+            }
+        } catch (Exception e) {
+            // Log error but don't let it fail the update
+            org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
+                .error("Failed to send update notifications for event {}: {}", eventId, e.getMessage());
+        }
+
         return mapEventToResponse(updatedEvent);
+
     }
 
     @Override
