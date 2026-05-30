@@ -44,11 +44,17 @@ class EventServiceImplTest {
     @Mock
     private TicketValidator ticketValidator;
 
+    @Mock
+    private co.empresa.vivaeventos.events.config.NotificationsClient notificationsClient;
+
+    @Mock
+    private co.empresa.vivaeventos.events.config.TicketsClient ticketsClient;
+
     private EventServiceImpl eventService;
 
     @BeforeEach
     void setUp() {
-        eventService = new EventServiceImpl(eventRepository, ticketRepository, conditionRepository, historyRepository, ticketValidator);
+        eventService = new EventServiceImpl(eventRepository, ticketRepository, conditionRepository, historyRepository, ticketValidator, notificationsClient, ticketsClient);
     }
 
     @Test

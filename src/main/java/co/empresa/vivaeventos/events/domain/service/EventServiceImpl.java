@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -255,26 +256,40 @@ public class EventServiceImpl implements IEventService {
         try {
             java.util.List<Map<String, Object>> issuedTickets = ticketsClient.getIssuedTicketsByEvent(eventId);
             if (issuedTickets != null && !issuedTickets.isEmpty()) {
+
+                // Determinar qué cambió para el detalle
+                StringBuilder detalleCambio = new StringBuilder();
+                if (request.getEventDateTime() != null) {
+                    detalleCambio.append("Fecha modificada");
+                }
+                if (request.getVenueName() != null) {
+                    if (detalleCambio.length() > 0) detalleCambio.append(" y ");
+                    detalleCambio.append("Lugar modificado");
+                }
+                if (detalleCambio.length() == 0) {
+                    detalleCambio.append("Información del evento actualizada");
+                }
+
                 for (Map<String, Object> ticket : issuedTickets) {
-                    UUID userId = UUID.fromString(String.valueOf(ticket.get("userId")));
+                    Object userIdObj = ticket.get("userId");
+                    if (userIdObj == null) continue;
+
+                    UUID userId = UUID.fromString(String.valueOf(userIdObj));
                     String holderEmail = (String) ticket.get("holderEmail");
+                    String holderName = ticket.get("holderName") instanceof String hn ? hn : (holderEmail != null ? holderEmail : "");
                     if (holderEmail == null) holderEmail = "";
-                    
+
                     Map<String, String> placeholders = new java.util.HashMap<>();
-                    placeholders.put("eventName", updatedEvent.getName());
-                    placeholders.put("newDate", updatedEvent.getEventDateTime().toString());
-                    placeholders.put("newVenue", updatedEvent.getVenueName());
-                    
-                    notificationsClient.sendNotification(userId, holderEmail, "EVENT_UPDATED", "EMAIL", placeholders);
+                    placeholders.put("nombre", holderName);
+                    placeholders.put("evento", updatedEvent.getName());
+                    placeholders.put("detalle_cambio", detalleCambio.toString());
+                    placeholders.put("nueva_fecha", updatedEvent.getEventDateTime() != null ? updatedEvent.getEventDateTime().toString() : "");
+                    placeholders.put("nuevo_lugar", updatedEvent.getVenueName() != null ? updatedEvent.getVenueName() : "");
+
+                    notificationsClient.sendNotification(userId, holderEmail, "CHANGE", "EMAIL", placeholders);
                 }
             }
         } catch (Exception e) {
-            org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
-                .error("Failed to send update notifications for event {}: {}", eventId, e.getMessage());
-        }
-            }
-        } catch (Exception e) {
-            // Log error but don't let it fail the update
             org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
                 .error("Failed to send update notifications for event {}: {}", eventId, e.getMessage());
         }

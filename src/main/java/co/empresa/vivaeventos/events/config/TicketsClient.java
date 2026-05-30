@@ -61,8 +61,7 @@ public class TicketsClient {
 
             var response = restTemplate.exchange(
                 url, HttpMethod.GET, request,
-                new ParameterizedTypeReference<Map<String, Object>>() {},
-                null
+                new ParameterizedTypeReference<Map<String, Object>>() {}
             );
             Map<String, Object> body = response.getBody();
             if (body != null && body.containsKey("boletas")) {
