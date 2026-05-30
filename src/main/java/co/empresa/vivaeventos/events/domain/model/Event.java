@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
@@ -30,10 +30,10 @@ public class Event {
     private String description;
 
     @Column(name = "event_end_date")
-    private LocalDateTime eventEndDate;
+    private OffsetDateTime eventEndDate;
 
     @Column(name = "event_date_time", nullable = false)
-    private LocalDateTime eventDateTime;
+    private OffsetDateTime eventDateTime;
 
     @Column(length = 500)
     private String location;
@@ -96,15 +96,15 @@ public class Event {
     private Boolean isActive = true;
 
     @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
 
     @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    private OffsetDateTime updatedAt;
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = OffsetDateTime.now();
+        updatedAt = OffsetDateTime.now();
         if (status == null) {
             status = "DRAFT";
         }
@@ -112,6 +112,6 @@ public class Event {
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = OffsetDateTime.now();
     }
 }

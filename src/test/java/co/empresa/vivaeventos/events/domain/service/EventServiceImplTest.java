@@ -17,7 +17,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -64,7 +64,7 @@ class EventServiceImplTest {
         request.setName("Test Event");
         request.setDescription("Test Description");
         request.setCategory("musica");
-        request.setEventDateTime(LocalDateTime.now().plusDays(7));
+        request.setEventDateTime(OffsetDateTime.now().plusDays(7));
         request.setIsPublished(false);
 
         Event savedEvent = new Event();

@@ -4,8 +4,11 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import co.empresa.vivaeventos.events.config.OffsetDateTimeDeserializer;
+
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,7 +25,8 @@ public class UpdateEventRequest {
     private String category;
 
     @Future(message = "La fecha del evento debe ser futura")
-    private LocalDateTime eventDateTime;
+    @JsonDeserialize(using = OffsetDateTimeDeserializer.class)
+    private OffsetDateTime eventDateTime;
 
     @Size(max = 500, message = "La URL del banner no puede exceder 500 caracteres")
     private String bannerUrl;

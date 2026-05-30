@@ -11,10 +11,11 @@ import co.empresa.vivaeventos.events.domain.repository.IEventHistoryRepository;
 import co.empresa.vivaeventos.events.domain.repository.IEventRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketConditionRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketRepository;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -155,7 +156,7 @@ public class EventServiceImpl implements IEventService {
     @Override
     @Transactional(readOnly = true)
     public List<EventResponse> getUpcomingEvents() {
-        return eventRepository.findUpcomingEvents(LocalDateTime.now())
+        return eventRepository.findUpcomingEvents(OffsetDateTime.now())
                 .stream()
                 .map(this::mapEventToResponse)
                 .collect(Collectors.toList());
@@ -164,7 +165,7 @@ public class EventServiceImpl implements IEventService {
     @Override
     @Transactional(readOnly = true)
     public List<EventResponse> getUpcomingEventsByCategory(String category) {
-        return eventRepository.findUpcomingEventsByCategory(category, LocalDateTime.now())
+        return eventRepository.findUpcomingEventsByCategory(category, OffsetDateTime.now())
                 .stream()
                 .map(this::mapEventToResponse)
                 .collect(Collectors.toList());
@@ -270,13 +271,19 @@ public class EventServiceImpl implements IEventService {
                     detalleCambio.append("Información del evento actualizada");
                 }
 
-                for (Map<String, Object> ticket : issuedTickets) {
-                    Object userIdObj = ticket.get("userId");
+                // Agrupar por orderId para enviar una sola notificacion por compra
+                java.util.Map<Object, java.util.List<Map<String, Object>>> ticketsByOrder =
+                    issuedTickets.stream().collect(java.util.stream.Collectors.groupingBy(t -> t.get("orderId")));
+
+                for (java.util.List<Map<String, Object>> orderTickets : ticketsByOrder.values()) {
+                    Map<String, Object> firstTicket = orderTickets.get(0);
+
+                    Object userIdObj = firstTicket.get("userId");
                     if (userIdObj == null) continue;
 
                     UUID userId = UUID.fromString(String.valueOf(userIdObj));
-                    String holderEmail = (String) ticket.get("holderEmail");
-                    String holderName = ticket.get("holderName") instanceof String hn ? hn : (holderEmail != null ? holderEmail : "");
+                    String holderEmail = (String) firstTicket.get("holderEmail");
+                    String holderName = firstTicket.get("holderName") instanceof String hn ? hn : (holderEmail != null ? holderEmail : "");
                     if (holderEmail == null) holderEmail = "";
 
                     Map<String, String> placeholders = new java.util.HashMap<>();
@@ -402,6 +409,47 @@ public class EventServiceImpl implements IEventService {
                 ticketTypes,
                 tickets.stream().anyMatch(t -> t.getCapacity() - t.getSoldCount() <= 0)
         );
+    }
+
+    @Scheduled(fixedRate = 3600000)
+    public void sendEventReminders() {
+        try {
+            OffsetDateTime now = OffsetDateTime.now();
+            List<Event> upcomingEvents = eventRepository.findEventsBetween(now.plusHours(23), now.plusHours(24));
+
+            for (Event event : upcomingEvents) {
+                java.util.List<Map<String, Object>> issuedTickets = ticketsClient.getIssuedTicketsByEvent(event.getId());
+                if (issuedTickets == null || issuedTickets.isEmpty()) continue;
+
+                java.util.Map<Object, java.util.List<Map<String, Object>>> ticketsByOrder =
+                    issuedTickets.stream().collect(java.util.stream.Collectors.groupingBy(t -> t.get("orderId")));
+
+                for (java.util.List<Map<String, Object>> orderTickets : ticketsByOrder.values()) {
+                    Map<String, Object> firstTicket = orderTickets.get(0);
+
+                    Object userIdObj = firstTicket.get("userId");
+                    if (userIdObj == null) continue;
+
+                    UUID userId = UUID.fromString(String.valueOf(userIdObj));
+                    String holderEmail = (String) firstTicket.get("holderEmail");
+                    String holderName = firstTicket.get("holderName") instanceof String hn ? hn : "";
+                    if (holderEmail == null) holderEmail = "";
+
+                    Map<String, String> placeholders = new java.util.HashMap<>();
+                    placeholders.put("nombre", holderName);
+                    placeholders.put("evento", event.getName());
+                    placeholders.put("fecha", event.getEventDateTime() != null ? event.getEventDateTime().toLocalDate().toString() : "");
+                    placeholders.put("hora", event.getEventDateTime() != null ? event.getEventDateTime().toLocalTime().toString() : "");
+                    placeholders.put("lugar", event.getVenueName() != null ? event.getVenueName() : "");
+                    placeholders.put("codigo_qr", "Disponible en tu perfil");
+
+                    notificationsClient.sendNotification(userId, holderEmail, "REMINDER", "EMAIL", placeholders);
+                }
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
+                .error("Failed to send event reminders: {}", e.getMessage());
+        }
     }
 
     private EventResponse mapEventToResponse(Event event) {

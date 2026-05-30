@@ -5,7 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -19,7 +19,7 @@ public class EventResponse {
     private String name;
     private String description;
     private String category;
-    private LocalDateTime eventDateTime;
+    private OffsetDateTime eventDateTime;
     private String bannerUrl;
     private String thumbnailUrl;
     private String venueName;
@@ -38,8 +38,8 @@ public class EventResponse {
     private String status;
     private Boolean isPublished;
     private Boolean isActive;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private OffsetDateTime createdAt;
+    private OffsetDateTime updatedAt;
     private List<TicketResponse> tickets;
 
     @Data
