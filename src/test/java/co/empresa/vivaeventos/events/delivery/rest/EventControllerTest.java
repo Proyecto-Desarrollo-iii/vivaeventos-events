@@ -3,6 +3,7 @@ package co.empresa.vivaeventos.events.delivery.rest;
 import co.empresa.vivaeventos.events.domain.model.Dto.CreateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.Dto.EventResponse;
 import co.empresa.vivaeventos.events.domain.service.IEventService;
+import co.empresa.vivaeventos.events.domain.service.ITicketService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -28,6 +29,9 @@ class EventControllerTest {
 
     @MockitoBean
     private IEventService eventService;
+
+    @MockitoBean
+    private ITicketService ticketService;
 
     @Test
     void shouldGetPublishedEvents() throws Exception {
