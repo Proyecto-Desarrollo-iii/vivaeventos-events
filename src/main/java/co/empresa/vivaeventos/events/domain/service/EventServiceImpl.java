@@ -254,52 +254,25 @@ public class EventServiceImpl implements IEventService {
                 "Evento actualizado: " + updatedEvent.getName(), prevState, eventToStateString(updatedEvent));
 
         // Notificar a los usuarios que tienen boletas
-        try {
-            java.util.List<Map<String, Object>> issuedTickets = ticketsClient.getIssuedTicketsByEvent(eventId);
-            if (issuedTickets != null && !issuedTickets.isEmpty()) {
-
-                // Determinar qué cambió para el detalle
-                StringBuilder detalleCambio = new StringBuilder();
-                if (request.getEventDateTime() != null) {
-                    detalleCambio.append("Fecha modificada");
-                }
-                if (request.getVenueName() != null) {
-                    if (detalleCambio.length() > 0) detalleCambio.append(" y ");
-                    detalleCambio.append("Lugar modificado");
-                }
-                if (detalleCambio.length() == 0) {
-                    detalleCambio.append("Información del evento actualizada");
-                }
-
-                // Agrupar por orderId para enviar una sola notificacion por compra
-                java.util.Map<Object, java.util.List<Map<String, Object>>> ticketsByOrder =
-                    issuedTickets.stream().collect(java.util.stream.Collectors.groupingBy(t -> t.get("orderId")));
-
-                for (java.util.List<Map<String, Object>> orderTickets : ticketsByOrder.values()) {
-                    Map<String, Object> firstTicket = orderTickets.get(0);
-
-                    Object userIdObj = firstTicket.get("userId");
-                    if (userIdObj == null) continue;
-
-                    UUID userId = UUID.fromString(String.valueOf(userIdObj));
-                    String holderEmail = (String) firstTicket.get("holderEmail");
-                    String holderName = firstTicket.get("holderName") instanceof String hn ? hn : (holderEmail != null ? holderEmail : "");
-                    if (holderEmail == null) holderEmail = "";
-
-                    Map<String, String> placeholders = new java.util.HashMap<>();
-                    placeholders.put("nombre", holderName);
-                    placeholders.put("evento", updatedEvent.getName());
-                    placeholders.put("detalle_cambio", detalleCambio.toString());
-                    placeholders.put("nueva_fecha", updatedEvent.getEventDateTime() != null ? updatedEvent.getEventDateTime().toString() : "");
-                    placeholders.put("nuevo_lugar", updatedEvent.getVenueName() != null ? updatedEvent.getVenueName() : "");
-
-                    notificationsClient.sendNotification(userId, holderEmail, "CHANGE", "EMAIL", placeholders);
-                }
-            }
-        } catch (Exception e) {
-            org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
-                .error("Failed to send update notifications for event {}: {}", eventId, e.getMessage());
+        StringBuilder detalleCambio = new StringBuilder();
+        if (request.getEventDateTime() != null) {
+            detalleCambio.append("Fecha modificada");
         }
+        if (request.getVenueName() != null) {
+            if (detalleCambio.length() > 0) detalleCambio.append(" y ");
+            detalleCambio.append("Lugar modificado");
+        }
+        if (detalleCambio.length() == 0) {
+            detalleCambio.append("Información del evento actualizada");
+        }
+        String finalDetalle = detalleCambio.toString();
+
+        forEachTicketHolder(eventId, updatedEvent.getName(), "CHANGE", (firstTicket, placeholders) -> {
+            placeholders.put("evento", updatedEvent.getName());
+            placeholders.put("detalle_cambio", finalDetalle);
+            placeholders.put("nueva_fecha", updatedEvent.getEventDateTime() != null ? updatedEvent.getEventDateTime().toString() : "");
+            placeholders.put("nuevo_lugar", updatedEvent.getVenueName() != null ? updatedEvent.getVenueName() : "");
+        });
 
         return mapEventToResponse(updatedEvent);
 
@@ -365,45 +338,22 @@ public class EventServiceImpl implements IEventService {
             motivo = "El evento ha sido cancelado por el organizador";
         }
         String finalMotivo = motivo;
-        try {
-            java.util.List<Map<String, Object>> issuedTickets = ticketsClient.getIssuedTicketsByEvent(eventId);
-            if (issuedTickets != null && !issuedTickets.isEmpty()) {
-                java.util.Map<Object, java.util.List<Map<String, Object>>> ticketsByOrder =
-                    issuedTickets.stream().collect(java.util.stream.Collectors.groupingBy(t -> t.get("orderId")));
 
-                for (java.util.List<Map<String, Object>> orderTickets : ticketsByOrder.values()) {
-                    Map<String, Object> firstTicket = orderTickets.get(0);
-                    Object userIdObj = firstTicket.get("userId");
-                    if (userIdObj == null) continue;
-
-                    UUID userId = UUID.fromString(String.valueOf(userIdObj));
-                    String holderEmail = (String) firstTicket.get("holderEmail");
-                    String holderName = firstTicket.get("holderName") instanceof String hn ? hn : (holderEmail != null ? holderEmail : "");
-                    if (holderEmail == null) holderEmail = "";
-
-                    String total = firstTicket.get("total") instanceof String t ? t : "";
-                    if (total.isBlank()) {
-                        Object priceObj = firstTicket.get("unitPrice");
-                        Object qtyObj = firstTicket.get("quantity");
-                        if (priceObj != null && qtyObj != null) {
-                            total = String.valueOf(Double.parseDouble(String.valueOf(priceObj)) * Integer.parseInt(String.valueOf(qtyObj)));
-                        }
-                    }
-
-                    Map<String, String> placeholders = new java.util.HashMap<>();
-                    placeholders.put("nombre", holderName);
-                    placeholders.put("evento", event.getName());
-                    placeholders.put("fecha", event.getEventDateTime() != null ? event.getEventDateTime().toString() : "");
-                    placeholders.put("motivo", finalMotivo);
-                    placeholders.put("total", total);
-
-                    notificationsClient.sendNotification(userId, holderEmail, "CANCELLATION", "EMAIL", placeholders);
+        forEachTicketHolder(eventId, event.getName(), "CANCELLATION", (firstTicket, placeholders) -> {
+            String total = firstTicket.get("total") instanceof String t ? t : "";
+            if (total.isBlank()) {
+                Object priceObj = firstTicket.get("unitPrice");
+                Object qtyObj = firstTicket.get("quantity");
+                if (priceObj != null && qtyObj != null) {
+                    total = String.valueOf(Double.parseDouble(String.valueOf(priceObj)) * Integer.parseInt(String.valueOf(qtyObj)));
                 }
             }
-        } catch (Exception e) {
-            org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
-                .error("Failed to send cancellation notifications for event {}: {}", eventId, e.getMessage());
-        }
+
+            placeholders.put("evento", event.getName());
+            placeholders.put("fecha", event.getEventDateTime() != null ? event.getEventDateTime().toString() : "");
+            placeholders.put("motivo", finalMotivo);
+            placeholders.put("total", total);
+        });
 
         List<Ticket> tickets = ticketRepository.findByEventId(eventId);
         for (Ticket ticket : tickets) {
@@ -468,32 +418,13 @@ public class EventServiceImpl implements IEventService {
 
             for (Event event : events) {
                 try {
-                    List<Map<String, Object>> issuedTickets = ticketsClient.getIssuedTicketsByEvent(event.getId());
-                    if (issuedTickets == null || issuedTickets.isEmpty()) continue;
-
-                    Map<Object, List<Map<String, Object>>> ticketsByOrder =
-                        issuedTickets.stream().collect(java.util.stream.Collectors.groupingBy(t -> t.get("orderId")));
-
-                    for (List<Map<String, Object>> orderTickets : ticketsByOrder.values()) {
-                        Map<String, Object> firstTicket = orderTickets.get(0);
-                        Object userIdObj = firstTicket.get("userId");
-                        if (userIdObj == null) continue;
-
-                        UUID userId = UUID.fromString(String.valueOf(userIdObj));
-                        String holderEmail = (String) firstTicket.get("holderEmail");
-                        String holderName = firstTicket.get("holderName") instanceof String hn ? hn : (holderEmail != null ? holderEmail : "");
-                        if (holderEmail == null) holderEmail = "";
-
-                        Map<String, String> placeholders = new java.util.HashMap<>();
-                        placeholders.put("nombre", holderName);
+                    forEachTicketHolder(event.getId(), event.getName(), "REMINDER", (firstTicket, placeholders) -> {
                         placeholders.put("evento", event.getName());
                         placeholders.put("fecha", event.getEventDateTime() != null ? event.getEventDateTime().toString() : "");
                         placeholders.put("hora", event.getEventDateTime() != null ? event.getEventDateTime().toLocalTime().toString() : "");
                         placeholders.put("lugar", event.getVenueName() != null ? event.getVenueName() : "");
                         placeholders.put("codigo_qr", "");
-
-                        notificationsClient.sendNotification(userId, holderEmail, "REMINDER", "EMAIL", placeholders);
-                    }
+                    });
 
                     event.setReminderSent(true);
                     eventRepository.save(event);
@@ -592,6 +523,37 @@ public class EventServiceImpl implements IEventService {
         return String.format("name=%s, category=%s, date=%s, venue=%s, published=%s, active=%s",
                 event.getName(), event.getCategory(), event.getEventDateTime(),
                 event.getVenueName(), event.getIsPublished(), event.getIsActive());
+    }
+
+    private void forEachTicketHolder(UUID eventId, String eventName, String eventType,
+            java.util.function.BiConsumer<Map<String, Object>, Map<String, String>> placeholderFill) {
+        try {
+            java.util.List<Map<String, Object>> issuedTickets = ticketsClient.getIssuedTicketsByEvent(eventId);
+            if (issuedTickets == null || issuedTickets.isEmpty()) return;
+
+            java.util.Map<Object, java.util.List<Map<String, Object>>> ticketsByOrder =
+                issuedTickets.stream().collect(java.util.stream.Collectors.groupingBy(t -> t.get("orderId")));
+
+            for (java.util.List<Map<String, Object>> orderTickets : ticketsByOrder.values()) {
+                Map<String, Object> firstTicket = orderTickets.get(0);
+                Object userIdObj = firstTicket.get("userId");
+                if (userIdObj == null) continue;
+
+                UUID userId = UUID.fromString(String.valueOf(userIdObj));
+                String holderEmail = (String) firstTicket.get("holderEmail");
+                String holderName = firstTicket.get("holderName") instanceof String hn ? hn : (holderEmail != null ? holderEmail : "");
+                if (holderEmail == null) holderEmail = "";
+
+                Map<String, String> placeholders = new java.util.HashMap<>();
+                placeholders.put("nombre", holderName);
+                placeholderFill.accept(firstTicket, placeholders);
+
+                notificationsClient.sendNotification(userId, holderEmail, eventType, "EMAIL", placeholders);
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
+                .error("Failed to send {} notifications for event {}: {}", eventType, eventName, e.getMessage());
+        }
     }
 
     public record EventSummary(
