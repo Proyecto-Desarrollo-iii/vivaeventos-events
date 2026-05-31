@@ -264,8 +264,9 @@ public class EventController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
         try {
             UUID organizerId = extractOrganizerId(body, userEmail);
+            String motivo = body.get("motivo") instanceof String s ? s : null;
 
-            eventService.deleteEvent(eventId, organizerId, userEmail);
+            eventService.deleteEvent(eventId, organizerId, userEmail, motivo);
 
             Map<String, Object> response = new HashMap<>();
             response.put("mensaje", "Evento eliminado exitosamente");

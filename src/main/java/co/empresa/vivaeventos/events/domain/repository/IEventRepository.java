@@ -27,6 +27,9 @@ public interface IEventRepository extends JpaRepository<Event, UUID> {
     @Query("SELECT e FROM Event e WHERE e.isPublished = true AND e.isActive = true AND e.category = :category AND e.eventDateTime >= :now ORDER BY e.eventDateTime ASC")
     List<Event> findUpcomingEventsByCategory(String category, OffsetDateTime now);
 
+    @Query("SELECT e FROM Event e WHERE e.isPublished = true AND e.isActive = true AND (e.reminderSent IS NULL OR e.reminderSent = false) AND e.eventDateTime >= :start AND e.eventDateTime < :end ORDER BY e.eventDateTime ASC")
+    List<Event> findEventsBetweenForReminder(OffsetDateTime start, OffsetDateTime end);
+
     @Query("SELECT e FROM Event e WHERE e.isPublished = true AND e.isActive = true AND e.eventDateTime >= :start AND e.eventDateTime < :end ORDER BY e.eventDateTime ASC")
     List<Event> findEventsBetween(OffsetDateTime start, OffsetDateTime end);
 }

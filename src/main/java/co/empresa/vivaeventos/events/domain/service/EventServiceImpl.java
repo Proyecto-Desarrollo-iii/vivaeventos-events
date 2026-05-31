@@ -348,7 +348,7 @@ public class EventServiceImpl implements IEventService {
 
     @Override
     @Transactional
-    public void deleteEvent(UUID eventId, UUID organizerId, String userEmail) {
+    public void deleteEvent(UUID eventId, UUID organizerId, String userEmail, String motivo) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Evento no encontrado: " + eventId));
 
@@ -359,6 +359,51 @@ public class EventServiceImpl implements IEventService {
         String prevState = eventToStateString(event);
         logEventChange(eventId, userEmail, "DELETED",
                 "Evento eliminado: " + event.getName(), prevState, null);
+
+        // Notificar cancelacion a los compradores (antes de borrar)
+        if (motivo == null || motivo.isBlank()) {
+            motivo = "El evento ha sido cancelado por el organizador";
+        }
+        String finalMotivo = motivo;
+        try {
+            java.util.List<Map<String, Object>> issuedTickets = ticketsClient.getIssuedTicketsByEvent(eventId);
+            if (issuedTickets != null && !issuedTickets.isEmpty()) {
+                java.util.Map<Object, java.util.List<Map<String, Object>>> ticketsByOrder =
+                    issuedTickets.stream().collect(java.util.stream.Collectors.groupingBy(t -> t.get("orderId")));
+
+                for (java.util.List<Map<String, Object>> orderTickets : ticketsByOrder.values()) {
+                    Map<String, Object> firstTicket = orderTickets.get(0);
+                    Object userIdObj = firstTicket.get("userId");
+                    if (userIdObj == null) continue;
+
+                    UUID userId = UUID.fromString(String.valueOf(userIdObj));
+                    String holderEmail = (String) firstTicket.get("holderEmail");
+                    String holderName = firstTicket.get("holderName") instanceof String hn ? hn : (holderEmail != null ? holderEmail : "");
+                    if (holderEmail == null) holderEmail = "";
+
+                    String total = firstTicket.get("total") instanceof String t ? t : "";
+                    if (total.isBlank()) {
+                        Object priceObj = firstTicket.get("unitPrice");
+                        Object qtyObj = firstTicket.get("quantity");
+                        if (priceObj != null && qtyObj != null) {
+                            total = String.valueOf(Double.parseDouble(String.valueOf(priceObj)) * Integer.parseInt(String.valueOf(qtyObj)));
+                        }
+                    }
+
+                    Map<String, String> placeholders = new java.util.HashMap<>();
+                    placeholders.put("nombre", holderName);
+                    placeholders.put("evento", event.getName());
+                    placeholders.put("fecha", event.getEventDateTime() != null ? event.getEventDateTime().toString() : "");
+                    placeholders.put("motivo", finalMotivo);
+                    placeholders.put("total", total);
+
+                    notificationsClient.sendNotification(userId, holderEmail, "CANCELLATION", "EMAIL", placeholders);
+                }
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
+                .error("Failed to send cancellation notifications for event {}: {}", eventId, e.getMessage());
+        }
 
         List<Ticket> tickets = ticketRepository.findByEventId(eventId);
         for (Ticket ticket : tickets) {
@@ -415,35 +460,46 @@ public class EventServiceImpl implements IEventService {
     public void sendEventReminders() {
         try {
             OffsetDateTime now = OffsetDateTime.now();
-            List<Event> upcomingEvents = eventRepository.findEventsBetween(now.plusHours(23), now.plusHours(24));
+            OffsetDateTime start = now;
+            OffsetDateTime end = now.plusHours(24);
 
-            for (Event event : upcomingEvents) {
-                java.util.List<Map<String, Object>> issuedTickets = ticketsClient.getIssuedTicketsByEvent(event.getId());
-                if (issuedTickets == null || issuedTickets.isEmpty()) continue;
+            List<Event> events = eventRepository.findEventsBetweenForReminder(start, end);
+            if (events.isEmpty()) return;
 
-                java.util.Map<Object, java.util.List<Map<String, Object>>> ticketsByOrder =
-                    issuedTickets.stream().collect(java.util.stream.Collectors.groupingBy(t -> t.get("orderId")));
+            for (Event event : events) {
+                try {
+                    List<Map<String, Object>> issuedTickets = ticketsClient.getIssuedTicketsByEvent(event.getId());
+                    if (issuedTickets == null || issuedTickets.isEmpty()) continue;
 
-                for (java.util.List<Map<String, Object>> orderTickets : ticketsByOrder.values()) {
-                    Map<String, Object> firstTicket = orderTickets.get(0);
+                    Map<Object, List<Map<String, Object>>> ticketsByOrder =
+                        issuedTickets.stream().collect(java.util.stream.Collectors.groupingBy(t -> t.get("orderId")));
 
-                    Object userIdObj = firstTicket.get("userId");
-                    if (userIdObj == null) continue;
+                    for (List<Map<String, Object>> orderTickets : ticketsByOrder.values()) {
+                        Map<String, Object> firstTicket = orderTickets.get(0);
+                        Object userIdObj = firstTicket.get("userId");
+                        if (userIdObj == null) continue;
 
-                    UUID userId = UUID.fromString(String.valueOf(userIdObj));
-                    String holderEmail = (String) firstTicket.get("holderEmail");
-                    String holderName = firstTicket.get("holderName") instanceof String hn ? hn : "";
-                    if (holderEmail == null) holderEmail = "";
+                        UUID userId = UUID.fromString(String.valueOf(userIdObj));
+                        String holderEmail = (String) firstTicket.get("holderEmail");
+                        String holderName = firstTicket.get("holderName") instanceof String hn ? hn : (holderEmail != null ? holderEmail : "");
+                        if (holderEmail == null) holderEmail = "";
 
-                    Map<String, String> placeholders = new java.util.HashMap<>();
-                    placeholders.put("nombre", holderName);
-                    placeholders.put("evento", event.getName());
-                    placeholders.put("fecha", event.getEventDateTime() != null ? event.getEventDateTime().toLocalDate().toString() : "");
-                    placeholders.put("hora", event.getEventDateTime() != null ? event.getEventDateTime().toLocalTime().toString() : "");
-                    placeholders.put("lugar", event.getVenueName() != null ? event.getVenueName() : "");
-                    placeholders.put("codigo_qr", "Disponible en tu perfil");
+                        Map<String, String> placeholders = new java.util.HashMap<>();
+                        placeholders.put("nombre", holderName);
+                        placeholders.put("evento", event.getName());
+                        placeholders.put("fecha", event.getEventDateTime() != null ? event.getEventDateTime().toString() : "");
+                        placeholders.put("hora", event.getEventDateTime() != null ? event.getEventDateTime().toLocalTime().toString() : "");
+                        placeholders.put("lugar", event.getVenueName() != null ? event.getVenueName() : "");
+                        placeholders.put("codigo_qr", "");
 
-                    notificationsClient.sendNotification(userId, holderEmail, "REMINDER", "EMAIL", placeholders);
+                        notificationsClient.sendNotification(userId, holderEmail, "REMINDER", "EMAIL", placeholders);
+                    }
+
+                    event.setReminderSent(true);
+                    eventRepository.save(event);
+                } catch (Exception e) {
+                    org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
+                        .error("Failed to process reminder for event {}: {}", event.getId(), e.getMessage());
                 }
             }
         } catch (Exception e) {

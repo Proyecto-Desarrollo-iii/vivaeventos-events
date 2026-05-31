@@ -30,7 +30,7 @@ public interface IEventService {
 
     void unpublishEvent(UUID eventId, UUID organizerId, String userEmail);
 
-    void deleteEvent(UUID eventId, UUID organizerId, String userEmail);
+    void deleteEvent(UUID eventId, UUID organizerId, String userEmail, String motivo);
 
     void deactivateEvent(UUID eventId, UUID organizerId, String userEmail);
 

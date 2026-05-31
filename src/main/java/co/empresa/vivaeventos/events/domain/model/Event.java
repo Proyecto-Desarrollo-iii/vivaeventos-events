@@ -94,6 +94,8 @@ public class Event {
 
     @Column(name = "is_active")
     private Boolean isActive = true;
+    @Column(name = "reminder_sent")
+    private Boolean reminderSent = false;
 
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
