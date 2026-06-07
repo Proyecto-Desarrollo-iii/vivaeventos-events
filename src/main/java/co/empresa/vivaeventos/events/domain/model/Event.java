@@ -8,7 +8,14 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "events")
+@Table(name = "events", indexes = {
+        @Index(name = "idx_events_published_active_date", columnList = "is_published, is_active, event_date_time DESC"),
+        @Index(name = "idx_events_category_date", columnList = "category, event_date_time DESC"),
+        @Index(name = "idx_events_organizer", columnList = "organizer_id"),
+        @Index(name = "idx_events_status", columnList = "status"),
+        @Index(name = "idx_events_date", columnList = "event_date_time"),
+        @Index(name = "idx_events_reminder", columnList = "is_published, is_active, reminder_sent, event_date_time")
+})
 @Getter
 @Setter
 public class Event {
