@@ -11,6 +11,8 @@ import co.empresa.vivaeventos.events.domain.repository.IEventHistoryRepository;
 import co.empresa.vivaeventos.events.domain.repository.IEventRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketConditionRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -137,6 +139,7 @@ public class EventServiceImpl implements IEventService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "eventos", key = "'published'")
     public List<EventResponse> getPublishedEvents() {
         return eventRepository.findByIsPublishedTrueAndIsActiveTrueOrderByEventDateTimeDesc()
                 .stream()
@@ -146,6 +149,7 @@ public class EventServiceImpl implements IEventService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "eventos", key = "'published_' + #category")
     public List<EventResponse> getPublishedEventsByCategory(String category) {
         return eventRepository.findByIsPublishedTrueAndCategoryOrderByEventDateTimeDesc(category)
                 .stream()
