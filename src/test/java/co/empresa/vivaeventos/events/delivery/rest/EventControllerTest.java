@@ -2,8 +2,8 @@ package co.empresa.vivaeventos.events.delivery.rest;
 
 import co.empresa.vivaeventos.events.config.AuditEventClient;
 import co.empresa.vivaeventos.events.config.AuditLoggingInterceptor;
-import co.empresa.vivaeventos.events.domain.model.Dto.CreateEventRequest;
-import co.empresa.vivaeventos.events.domain.model.Dto.EventResponse;
+import co.empresa.vivaeventos.events.domain.model.dto.CreateEventRequest;
+import co.empresa.vivaeventos.events.domain.model.dto.EventResponse;
 import co.empresa.vivaeventos.events.domain.service.IEventService;
 import co.empresa.vivaeventos.events.domain.service.ITicketService;
 import jakarta.servlet.http.HttpServletRequest;

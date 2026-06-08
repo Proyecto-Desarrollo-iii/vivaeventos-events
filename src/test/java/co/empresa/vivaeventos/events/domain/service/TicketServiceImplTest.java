@@ -1,6 +1,6 @@
 package co.empresa.vivaeventos.events.domain.service;
 
-import co.empresa.vivaeventos.events.domain.model.Dto.CreateEventRequest;
+import co.empresa.vivaeventos.events.domain.model.dto.CreateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.Ticket;
 import co.empresa.vivaeventos.events.domain.repository.ITicketConditionRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketRepository;

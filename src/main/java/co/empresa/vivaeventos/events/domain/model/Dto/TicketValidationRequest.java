@@ -1,4 +1,4 @@
-package co.empresa.vivaeventos.events.domain.model.Dto;
+package co.empresa.vivaeventos.events.domain.model.dto;
 
 import jakarta.validation.constraints.*;
 import lombok.Data;

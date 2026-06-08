@@ -1,8 +1,8 @@
 package co.empresa.vivaeventos.events.domain.service;
 
-import co.empresa.vivaeventos.events.domain.model.Dto.CreateEventRequest;
-import co.empresa.vivaeventos.events.domain.model.Dto.EventResponse;
-import co.empresa.vivaeventos.events.domain.model.Dto.UpdateEventRequest;
+import co.empresa.vivaeventos.events.domain.model.dto.CreateEventRequest;
+import co.empresa.vivaeventos.events.domain.model.dto.EventResponse;
+import co.empresa.vivaeventos.events.domain.model.dto.UpdateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.Event;
 import co.empresa.vivaeventos.events.domain.model.Ticket;
 import co.empresa.vivaeventos.events.domain.model.TicketCondition;
@@ -11,6 +11,7 @@ import co.empresa.vivaeventos.events.domain.repository.IEventHistoryRepository;
 import co.empresa.vivaeventos.events.domain.repository.IEventRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketConditionRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketRepository;
+import co.empresa.vivaeventos.events.config.AuditEventRequest;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -120,9 +121,9 @@ public class EventServiceImpl implements IEventService {
         logEventChange(savedEvent.getId(), userEmail, "CREATED",
                 "Evento creado: " + savedEvent.getName(), null, eventToStateString(savedEvent));
 
-        auditEventClient.logEvent("events", null, null,
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
                 "CREAR_EVENTO", "evento", savedEvent.getId().toString(),
-                null, eventToStateString(savedEvent));
+                null, eventToStateString(savedEvent)));
 
         return mapEventToResponse(savedEvent);
     }
@@ -264,9 +265,9 @@ public class EventServiceImpl implements IEventService {
         logEventChange(eventId, userEmail, "UPDATED",
                 "Evento actualizado: " + updatedEvent.getName(), prevState, eventToStateString(updatedEvent));
 
-        auditEventClient.logEvent("events", null, null,
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
                 "MODIFICAR_EVENTO", "evento", eventId.toString(),
-                prevState, eventToStateString(updatedEvent));
+                prevState, eventToStateString(updatedEvent)));
 
         // Notificar a los usuarios que tienen boletas
         StringBuilder detalleCambio = new StringBuilder();
@@ -315,9 +316,9 @@ public class EventServiceImpl implements IEventService {
         logEventChange(eventId, userEmail, "PUBLISHED",
                 "Evento publicado: " + event.getName(), prevState, eventToStateString(event));
 
-        auditEventClient.logEvent("events", null, null,
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
                 "PUBLICAR_EVENTO", "evento", eventId.toString(),
-                prevState, eventToStateString(event));
+                prevState, eventToStateString(event)));
     }
 
     @Override
@@ -337,9 +338,9 @@ public class EventServiceImpl implements IEventService {
         logEventChange(eventId, userEmail, "UNPUBLISHED",
                 "Evento despublicado: " + event.getName(), prevState, eventToStateString(event));
 
-        auditEventClient.logEvent("events", null, null,
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
                 "DESPUBLICAR_EVENTO", "evento", eventId.toString(),
-                prevState, eventToStateString(event));
+                prevState, eventToStateString(event)));
     }
 
     @Override
@@ -356,9 +357,9 @@ public class EventServiceImpl implements IEventService {
         logEventChange(eventId, userEmail, "DELETED",
                 "Evento eliminado: " + event.getName(), prevState, null);
 
-        auditEventClient.logEvent("events", null, null,
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
                 "ELIMINAR_EVENTO", "evento", eventId.toString(),
-                prevState, null);
+                prevState, null));
 
         // Notificar cancelacion a los compradores (antes de borrar)
         if (motivo == null || motivo.isBlank()) {
@@ -408,9 +409,9 @@ public class EventServiceImpl implements IEventService {
         logEventChange(eventId, userEmail, "DEACTIVATED",
                 "Evento desactivado: " + event.getName(), prevState, eventToStateString(event));
 
-        auditEventClient.logEvent("events", null, null,
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
                 "DESACTIVAR_EVENTO", "evento", eventId.toString(),
-                prevState, eventToStateString(event));
+                prevState, eventToStateString(event)));
     }
 
     @Override
