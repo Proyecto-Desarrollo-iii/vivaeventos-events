@@ -2,8 +2,8 @@ package co.empresa.vivaeventos.events.domain.service;
 
 import co.empresa.vivaeventos.events.domain.model.Event;
 import co.empresa.vivaeventos.events.domain.model.Ticket;
-import co.empresa.vivaeventos.events.domain.model.Dto.CreateEventRequest;
-import co.empresa.vivaeventos.events.domain.model.Dto.EventResponse;
+import co.empresa.vivaeventos.events.domain.model.dto.CreateEventRequest;
+import co.empresa.vivaeventos.events.domain.model.dto.EventResponse;
 import co.empresa.vivaeventos.events.domain.repository.IEventHistoryRepository;
 import co.empresa.vivaeventos.events.domain.repository.IEventRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketConditionRepository;
@@ -50,11 +50,14 @@ class EventServiceImplTest {
     @Mock
     private co.empresa.vivaeventos.events.config.TicketsClient ticketsClient;
 
+    @Mock
+    private co.empresa.vivaeventos.events.config.AuditEventClient auditEventClient;
+
     private EventServiceImpl eventService;
 
     @BeforeEach
     void setUp() {
-        eventService = new EventServiceImpl(eventRepository, ticketRepository, conditionRepository, historyRepository, ticketValidator, notificationsClient, ticketsClient);
+        eventService = new EventServiceImpl(eventRepository, ticketRepository, conditionRepository, historyRepository, ticketValidator, notificationsClient, ticketsClient, auditEventClient);
     }
 
     @Test

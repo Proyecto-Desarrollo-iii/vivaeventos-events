@@ -1,8 +1,8 @@
 package co.empresa.vivaeventos.events.domain.service;
 
-import co.empresa.vivaeventos.events.domain.model.Dto.CreateEventRequest;
-import co.empresa.vivaeventos.events.domain.model.Dto.EventResponse;
-import co.empresa.vivaeventos.events.domain.model.Dto.UpdateEventRequest;
+import co.empresa.vivaeventos.events.domain.model.dto.CreateEventRequest;
+import co.empresa.vivaeventos.events.domain.model.dto.EventResponse;
+import co.empresa.vivaeventos.events.domain.model.dto.UpdateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.Event;
 import co.empresa.vivaeventos.events.domain.model.Ticket;
 import co.empresa.vivaeventos.events.domain.model.TicketCondition;
@@ -11,6 +11,7 @@ import co.empresa.vivaeventos.events.domain.repository.IEventHistoryRepository;
 import co.empresa.vivaeventos.events.domain.repository.IEventRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketConditionRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketRepository;
+import co.empresa.vivaeventos.events.config.AuditEventRequest;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -33,14 +34,16 @@ public class EventServiceImpl implements IEventService {
     private final TicketValidator ticketValidator;
     private final co.empresa.vivaeventos.events.config.NotificationsClient notificationsClient;
     private final co.empresa.vivaeventos.events.config.TicketsClient ticketsClient;
+    private final co.empresa.vivaeventos.events.config.AuditEventClient auditEventClient;
 
     public EventServiceImpl(IEventRepository eventRepository,
                                 ITicketRepository ticketRepository,
                                 ITicketConditionRepository conditionRepository,
                                 IEventHistoryRepository historyRepository,
                                 TicketValidator ticketValidator,
-                                co.empresa.vivaeventos.events.config.NotificationsClient notificationsClient,
-                                co.empresa.vivaeventos.events.config.TicketsClient ticketsClient) {
+                                 co.empresa.vivaeventos.events.config.NotificationsClient notificationsClient,
+                                 co.empresa.vivaeventos.events.config.TicketsClient ticketsClient,
+                                 co.empresa.vivaeventos.events.config.AuditEventClient auditEventClient) {
         this.eventRepository = eventRepository;
         this.ticketRepository = ticketRepository;
         this.conditionRepository = conditionRepository;
@@ -48,6 +51,7 @@ public class EventServiceImpl implements IEventService {
         this.ticketValidator = ticketValidator;
         this.notificationsClient = notificationsClient;
         this.ticketsClient = ticketsClient;
+        this.auditEventClient = auditEventClient;
     }
 
     @Override
@@ -116,6 +120,10 @@ public class EventServiceImpl implements IEventService {
 
         logEventChange(savedEvent.getId(), userEmail, "CREATED",
                 "Evento creado: " + savedEvent.getName(), null, eventToStateString(savedEvent));
+
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
+                "CREAR_EVENTO", "evento", savedEvent.getId().toString(),
+                null, eventToStateString(savedEvent)));
 
         return mapEventToResponse(savedEvent);
     }
@@ -257,6 +265,10 @@ public class EventServiceImpl implements IEventService {
         logEventChange(eventId, userEmail, "UPDATED",
                 "Evento actualizado: " + updatedEvent.getName(), prevState, eventToStateString(updatedEvent));
 
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
+                "MODIFICAR_EVENTO", "evento", eventId.toString(),
+                prevState, eventToStateString(updatedEvent)));
+
         // Notificar a los usuarios que tienen boletas
         StringBuilder detalleCambio = new StringBuilder();
         if (request.getEventDateTime() != null) {
@@ -303,6 +315,10 @@ public class EventServiceImpl implements IEventService {
         eventRepository.save(event);
         logEventChange(eventId, userEmail, "PUBLISHED",
                 "Evento publicado: " + event.getName(), prevState, eventToStateString(event));
+
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
+                "PUBLICAR_EVENTO", "evento", eventId.toString(),
+                prevState, eventToStateString(event)));
     }
 
     @Override
@@ -321,6 +337,10 @@ public class EventServiceImpl implements IEventService {
         eventRepository.save(event);
         logEventChange(eventId, userEmail, "UNPUBLISHED",
                 "Evento despublicado: " + event.getName(), prevState, eventToStateString(event));
+
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
+                "DESPUBLICAR_EVENTO", "evento", eventId.toString(),
+                prevState, eventToStateString(event)));
     }
 
     @Override
@@ -336,6 +356,10 @@ public class EventServiceImpl implements IEventService {
         String prevState = eventToStateString(event);
         logEventChange(eventId, userEmail, "DELETED",
                 "Evento eliminado: " + event.getName(), prevState, null);
+
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
+                "ELIMINAR_EVENTO", "evento", eventId.toString(),
+                prevState, null));
 
         // Notificar cancelacion a los compradores (antes de borrar)
         if (motivo == null || motivo.isBlank()) {
@@ -384,6 +408,10 @@ public class EventServiceImpl implements IEventService {
         eventRepository.save(event);
         logEventChange(eventId, userEmail, "DEACTIVATED",
                 "Evento desactivado: " + event.getName(), prevState, eventToStateString(event));
+
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
+                "DESACTIVAR_EVENTO", "evento", eventId.toString(),
+                prevState, eventToStateString(event)));
     }
 
     @Override
