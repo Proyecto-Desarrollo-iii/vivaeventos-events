@@ -1,9 +1,14 @@
 package co.empresa.vivaeventos.events.delivery.rest;
 
+import co.empresa.vivaeventos.events.config.AuditEventClient;
+import co.empresa.vivaeventos.events.config.AuditLoggingInterceptor;
 import co.empresa.vivaeventos.events.domain.model.Dto.CreateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.Dto.EventResponse;
 import co.empresa.vivaeventos.events.domain.service.IEventService;
 import co.empresa.vivaeventos.events.domain.service.ITicketService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -32,6 +37,18 @@ class EventControllerTest {
 
     @MockitoBean
     private ITicketService ticketService;
+
+    @MockitoBean
+    private AuditEventClient auditEventClient;
+
+    @MockitoBean
+    private AuditLoggingInterceptor auditLoggingInterceptor;
+
+    @BeforeEach
+    void setUp() {
+        when(auditLoggingInterceptor.preHandle(any(HttpServletRequest.class), any(HttpServletResponse.class), any()))
+                .thenReturn(true);
+    }
 
     @Test
     void shouldGetPublishedEvents() throws Exception {
