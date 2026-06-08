@@ -84,7 +84,7 @@ public class EventServiceImpl implements IEventService {
         event.setSocialLinks(request.getSocialLinks());
         event.setIsPublished(request.getIsPublished() != null ? request.getIsPublished() : true);
         event.setIsActive(true);
-        event.setStatus(request.getIsPublished() == false ? "DRAFT" : "PUBLISHED");
+        event.setStatus(Boolean.FALSE.equals(request.getIsPublished()) ? "DRAFT" : "PUBLISHED");
 
         Event savedEvent = eventRepository.save(event);
 
