@@ -6,6 +6,7 @@ import co.empresa.vivaeventos.events.domain.model.dto.CreateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.dto.EventResponse;
 import co.empresa.vivaeventos.events.domain.service.IEventService;
 import co.empresa.vivaeventos.events.domain.service.ITicketService;
+import co.empresa.vivaeventos.events.security.JwtService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +44,9 @@ class EventControllerTest {
 
     @MockitoBean
     private AuditLoggingInterceptor auditLoggingInterceptor;
+
+    @MockitoBean
+    private JwtService jwtService;
 
     @BeforeEach
     void setUp() {
