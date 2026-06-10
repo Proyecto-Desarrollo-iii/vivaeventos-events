@@ -3,6 +3,7 @@ package co.empresa.vivaeventos.events.delivery.rest;
 import co.empresa.vivaeventos.events.config.AuditEventClient;
 import co.empresa.vivaeventos.events.config.AuditLoggingInterceptor;
 import co.empresa.vivaeventos.events.domain.model.dto.CreateEventRequest;
+import co.empresa.vivaeventos.events.security.JwtService;
 import co.empresa.vivaeventos.events.domain.service.ITicketService;
 import co.empresa.vivaeventos.events.domain.service.TicketServiceImpl.ConditionResponse;
 import co.empresa.vivaeventos.events.domain.service.TicketServiceImpl.QuotaInfo;
@@ -43,6 +44,9 @@ class TicketControllerTest {
 
     @MockitoBean
     private AuditLoggingInterceptor auditLoggingInterceptor;
+
+    @MockitoBean
+    private JwtService jwtService;
 
     @BeforeEach
     void setUp() {
