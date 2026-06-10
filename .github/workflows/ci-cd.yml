@@ -113,3 +113,48 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy-to-cloud-run:
+    needs: docker-build-and-push
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    steps:
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/834797281102/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: cloud-run-admin@vivaeventos-498516.iam.gserviceaccount.com
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+      - name: Pull from GHCR and push to Artifact Registry
+        run: |
+          REPO_LOWER=${GITHUB_REPOSITORY,,}
+          docker pull ghcr.io/$REPO_LOWER:${{ github.ref_name }}
+          docker tag ghcr.io/$REPO_LOWER:${{ github.ref_name }} \
+            us-central1-docker.pkg.dev/vivaeventos-498516/cloud-run-images/vivaeventos-events:${{ github.ref_name }}
+          docker push us-central1-docker.pkg.dev/vivaeventos-498516/cloud-run-images/vivaeventos-events:${{ github.ref_name }}
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: vivaeventos-events
+          image: us-central1-docker.pkg.dev/vivaeventos-498516/cloud-run-images/vivaeventos-events:${{ github.ref_name }}
+          region: us-central1
+          env_vars: |
+            SERVER_PORT=8080
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            SPRING_DATASOURCE_URL=jdbc:postgresql://${{ secrets.DB_HOST }}:5432/vivaeventos_events?sslmode=require
+            SPRING_DATASOURCE_USERNAME=${{ secrets.DB_USER }}
+            SPRING_DATASOURCE_PASSWORD=${{ secrets.DB_PASSWORD }}
+            SERVICES_TICKETS_URL=${{ secrets.SERVICES_TICKETS_URL }}
+            SERVICES_NOTIFICATIONS_URL=${{ secrets.SERVICES_NOTIFICATIONS_URL }}

@@ -4,6 +4,7 @@ import co.empresa.vivaeventos.events.domain.model.Event;
 import co.empresa.vivaeventos.events.domain.model.Ticket;
 import co.empresa.vivaeventos.events.domain.model.dto.CreateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.dto.EventResponse;
+import co.empresa.vivaeventos.events.domain.repository.IEventHistoryRepository;
 import co.empresa.vivaeventos.events.domain.repository.IEventRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketConditionRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketRepository;
@@ -16,7 +17,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -38,13 +39,25 @@ class EventServiceImplTest {
     private ITicketConditionRepository conditionRepository;
 
     @Mock
+    private IEventHistoryRepository historyRepository;
+
+    @Mock
     private TicketValidator ticketValidator;
+
+    @Mock
+    private co.empresa.vivaeventos.events.config.NotificationsClient notificationsClient;
+
+    @Mock
+    private co.empresa.vivaeventos.events.config.TicketsClient ticketsClient;
+
+    @Mock
+    private co.empresa.vivaeventos.events.config.AuditEventClient auditEventClient;
 
     private EventServiceImpl eventService;
 
     @BeforeEach
     void setUp() {
-        eventService = new EventServiceImpl(eventRepository, ticketRepository, conditionRepository, ticketValidator);
+        eventService = new EventServiceImpl(eventRepository, ticketRepository, conditionRepository, historyRepository, ticketValidator, notificationsClient, ticketsClient, auditEventClient);
     }
 
     @Test
@@ -54,7 +67,8 @@ class EventServiceImplTest {
         request.setName("Test Event");
         request.setDescription("Test Description");
         request.setCategory("musica");
-        request.setEventDateTime(LocalDateTime.now().plusDays(7));
+        request.setEventDateTime(OffsetDateTime.now().plusDays(7));
+        request.setIsPublished(false);
 
         Event savedEvent = new Event();
         savedEvent.setId(UUID.randomUUID());
@@ -71,7 +85,7 @@ class EventServiceImplTest {
         when(conditionRepository.findByTicketId(any())).thenReturn(java.util.Collections.emptyList());
         when(ticketValidator.validateTicketsForCreate(any(), any())).thenReturn(java.util.Collections.emptyList());
 
-        EventResponse response = eventService.createEvent(organizerId, request);
+        EventResponse response = eventService.createEvent(organizerId, "test@example.com", request);
 
         assertNotNull(response);
         assertEquals("Test Event", response.getName());
@@ -130,7 +144,7 @@ class EventServiceImplTest {
         });
         when(ticketValidator.validateEventForPublishing(eventId, organizerId)).thenReturn(java.util.Collections.emptyList());
 
-        eventService.publishEvent(eventId, organizerId);
+        eventService.publishEvent(eventId, organizerId, "test@example.com");
 
         assertTrue(event.getIsPublished());
         verify(eventRepository).save(any(Event.class));
@@ -148,6 +162,6 @@ class EventServiceImplTest {
 
         when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
 
-        assertThrows(RuntimeException.class, () -> eventService.publishEvent(eventId, differentOrganizerId));
+        assertThrows(RuntimeException.class, () -> eventService.publishEvent(eventId, differentOrganizerId, "test@example.com"));
     }
 }

@@ -1,10 +1,15 @@
 package co.empresa.vivaeventos.events.delivery.rest;
 
+import co.empresa.vivaeventos.events.config.AuditEventClient;
+import co.empresa.vivaeventos.events.config.AuditLoggingInterceptor;
 import co.empresa.vivaeventos.events.domain.model.dto.CreateEventRequest;
 import co.empresa.vivaeventos.events.domain.service.ITicketService;
 import co.empresa.vivaeventos.events.domain.service.TicketServiceImpl.ConditionResponse;
 import co.empresa.vivaeventos.events.domain.service.TicketServiceImpl.QuotaInfo;
 import co.empresa.vivaeventos.events.domain.service.TicketServiceImpl.TicketResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -32,6 +37,18 @@ class TicketControllerTest {
 
     @MockitoBean
     private ITicketService ticketService;
+
+    @MockitoBean
+    private AuditEventClient auditEventClient;
+
+    @MockitoBean
+    private AuditLoggingInterceptor auditLoggingInterceptor;
+
+    @BeforeEach
+    void setUp() {
+        when(auditLoggingInterceptor.preHandle(any(HttpServletRequest.class), any(HttpServletResponse.class), any()))
+                .thenReturn(true);
+    }
 
     @Test
     void shouldGetTicketsByEvent() throws Exception {

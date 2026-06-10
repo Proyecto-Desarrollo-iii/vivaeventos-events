@@ -4,11 +4,18 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "events")
+@Table(name = "events", indexes = {
+        @Index(name = "idx_events_published_active_date", columnList = "is_published, is_active, event_date_time DESC"),
+        @Index(name = "idx_events_category_date", columnList = "category, event_date_time DESC"),
+        @Index(name = "idx_events_organizer", columnList = "organizer_id"),
+        @Index(name = "idx_events_status", columnList = "status"),
+        @Index(name = "idx_events_date", columnList = "event_date_time"),
+        @Index(name = "idx_events_reminder", columnList = "is_published, is_active, reminder_sent, event_date_time")
+})
 @Getter
 @Setter
 public class Event {
@@ -29,14 +36,11 @@ public class Event {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(nullable = false)
-    private LocalDateTime eventDate;
-
     @Column(name = "event_end_date")
-    private LocalDateTime eventEndDate;
+    private OffsetDateTime eventEndDate;
 
     @Column(name = "event_date_time", nullable = false)
-    private LocalDateTime eventDateTime;
+    private OffsetDateTime eventDateTime;
 
     @Column(length = 500)
     private String location;
@@ -89,25 +93,27 @@ public class Event {
     @Column(name = "twitter_url", columnDefinition = "TEXT")
     private String twitterUrl;
 
+    @Column(name = "social_links", columnDefinition = "TEXT")
+    private String socialLinks;
+
     @Column(name = "is_published")
     private Boolean isPublished = false;
 
     @Column(name = "is_active")
     private Boolean isActive = true;
+    @Column(name = "reminder_sent")
+    private Boolean reminderSent = false;
 
     @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
 
     @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    private OffsetDateTime updatedAt;
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-        if (eventDate == null && eventDateTime != null) {
-            eventDate = eventDateTime;
-        }
+        createdAt = OffsetDateTime.now();
+        updatedAt = OffsetDateTime.now();
         if (status == null) {
             status = "DRAFT";
         }
@@ -115,9 +121,6 @@ public class Event {
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-        if (eventDateTime != null && eventDate == null) {
-            eventDate = eventDateTime;
-        }
+        updatedAt = OffsetDateTime.now();
     }
 }

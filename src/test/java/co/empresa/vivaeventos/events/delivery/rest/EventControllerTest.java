@@ -1,8 +1,14 @@
 package co.empresa.vivaeventos.events.delivery.rest;
 
+import co.empresa.vivaeventos.events.config.AuditEventClient;
+import co.empresa.vivaeventos.events.config.AuditLoggingInterceptor;
 import co.empresa.vivaeventos.events.domain.model.dto.CreateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.dto.EventResponse;
 import co.empresa.vivaeventos.events.domain.service.IEventService;
+import co.empresa.vivaeventos.events.domain.service.ITicketService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -10,7 +16,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.UUID;
 
@@ -28,6 +34,21 @@ class EventControllerTest {
 
     @MockitoBean
     private IEventService eventService;
+
+    @MockitoBean
+    private ITicketService ticketService;
+
+    @MockitoBean
+    private AuditEventClient auditEventClient;
+
+    @MockitoBean
+    private AuditLoggingInterceptor auditLoggingInterceptor;
+
+    @BeforeEach
+    void setUp() {
+        when(auditLoggingInterceptor.preHandle(any(HttpServletRequest.class), any(HttpServletResponse.class), any()))
+                .thenReturn(true);
+    }
 
     @Test
     void shouldGetPublishedEvents() throws Exception {
@@ -63,7 +84,7 @@ class EventControllerTest {
         EventResponse event = new EventResponse();
         event.setId(UUID.randomUUID());
         event.setName("Upcoming Event");
-        event.setEventDateTime(LocalDateTime.now().plusDays(7));
+        event.setEventDateTime(OffsetDateTime.now().plusDays(7));
 
         when(eventService.getUpcomingEvents()).thenReturn(Collections.singletonList(event));
 

@@ -165,6 +165,24 @@ public class TicketServiceImpl implements ITicketService {
     }
 
     @Override
+    @Transactional
+    public void incrementSoldCount(UUID ticketId, int quantity) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new RuntimeException("Tipo de boleta no encontrado: " + ticketId));
+
+        int newSold = ticket.getSoldCount() + quantity;
+        if (newSold > ticket.getCapacity()) {
+            throw new RuntimeException(
+                    "No hay suficientes boletas disponibles. Vendidas: " + ticket.getSoldCount()
+                    + ", capacidad: " + ticket.getCapacity() + ", intentando vender: " + quantity
+            );
+        }
+
+        ticket.setSoldCount(newSold);
+        ticketRepository.save(ticket);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public QuotaInfo getQuotaInfo(UUID ticketId) {
         Ticket ticket = ticketRepository.findById(ticketId)

@@ -7,7 +7,7 @@ import co.empresa.vivaeventos.events.domain.repository.ITicketRepository;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -45,7 +45,7 @@ public class TicketValidator {
         this.ticketRepository = ticketRepository;
     }
 
-    public List<String> validateTicketsForCreate(List<CreateEventRequest.TicketRequest> tickets, LocalDateTime eventDateTime) {
+    public List<String> validateTicketsForCreate(List<CreateEventRequest.TicketRequest> tickets, OffsetDateTime eventDateTime) {
         List<String> errors = new ArrayList<>();
 
         if (tickets == null || tickets.isEmpty()) {
@@ -69,8 +69,8 @@ public class TicketValidator {
     }
 
     public List<String> validateTicketsForUpdate(List<CreateEventRequest.TicketRequest> tickets,
-                                                   java.util.UUID eventId,
-                                                   LocalDateTime eventDateTime) {
+                                                    java.util.UUID eventId,
+                                                    OffsetDateTime eventDateTime) {
         List<String> errors = new ArrayList<>();
 
         if (tickets == null || tickets.isEmpty()) {

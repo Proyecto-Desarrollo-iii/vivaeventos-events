@@ -6,14 +6,21 @@ import co.empresa.vivaeventos.events.domain.model.dto.UpdateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.Event;
 import co.empresa.vivaeventos.events.domain.model.Ticket;
 import co.empresa.vivaeventos.events.domain.model.TicketCondition;
+import co.empresa.vivaeventos.events.domain.model.EventHistory;
+import co.empresa.vivaeventos.events.domain.repository.IEventHistoryRepository;
 import co.empresa.vivaeventos.events.domain.repository.IEventRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketConditionRepository;
 import co.empresa.vivaeventos.events.domain.repository.ITicketRepository;
+import co.empresa.vivaeventos.events.config.AuditEventRequest;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -23,21 +30,33 @@ public class EventServiceImpl implements IEventService {
     private final IEventRepository eventRepository;
     private final ITicketRepository ticketRepository;
     private final ITicketConditionRepository conditionRepository;
+    private final IEventHistoryRepository historyRepository;
     private final TicketValidator ticketValidator;
+    private final co.empresa.vivaeventos.events.config.NotificationsClient notificationsClient;
+    private final co.empresa.vivaeventos.events.config.TicketsClient ticketsClient;
+    private final co.empresa.vivaeventos.events.config.AuditEventClient auditEventClient;
 
     public EventServiceImpl(IEventRepository eventRepository,
-                            ITicketRepository ticketRepository,
-                            ITicketConditionRepository conditionRepository,
-                            TicketValidator ticketValidator) {
+                                ITicketRepository ticketRepository,
+                                ITicketConditionRepository conditionRepository,
+                                IEventHistoryRepository historyRepository,
+                                TicketValidator ticketValidator,
+                                 co.empresa.vivaeventos.events.config.NotificationsClient notificationsClient,
+                                 co.empresa.vivaeventos.events.config.TicketsClient ticketsClient,
+                                 co.empresa.vivaeventos.events.config.AuditEventClient auditEventClient) {
         this.eventRepository = eventRepository;
         this.ticketRepository = ticketRepository;
         this.conditionRepository = conditionRepository;
+        this.historyRepository = historyRepository;
         this.ticketValidator = ticketValidator;
+        this.notificationsClient = notificationsClient;
+        this.ticketsClient = ticketsClient;
+        this.auditEventClient = auditEventClient;
     }
 
     @Override
     @Transactional
-    public EventResponse createEvent(UUID organizerId, CreateEventRequest request) {
+    public EventResponse createEvent(UUID organizerId, String userEmail, CreateEventRequest request) {
         List<String> validationErrors = ticketValidator.validateTicketsForCreate(
                 request.getTickets(),
                 request.getEventDateTime()
@@ -61,13 +80,15 @@ public class EventServiceImpl implements IEventService {
         event.setLongitude(request.getLongitude());
         event.setMapsEmbedUrl(request.getMapsEmbedUrl());
         event.setMapsLinkUrl(request.getMapsLinkUrl());
+        event.setCity(request.getCity());
         event.setArtistName(request.getArtistName());
         event.setSpotifyUrl(request.getSpotifyUrl());
         event.setInstagramUrl(request.getInstagramUrl());
         event.setTwitterUrl(request.getTwitterUrl());
-        event.setIsPublished(false);
+        event.setSocialLinks(request.getSocialLinks());
+        event.setIsPublished(request.getIsPublished() != null ? request.getIsPublished() : true);
         event.setIsActive(true);
-        event.setStatus("DRAFT");
+        event.setStatus(Boolean.FALSE.equals(request.getIsPublished()) ? "DRAFT" : "PUBLISHED");
 
         Event savedEvent = eventRepository.save(event);
 
@@ -97,6 +118,13 @@ public class EventServiceImpl implements IEventService {
             }
         }
 
+        logEventChange(savedEvent.getId(), userEmail, "CREATED",
+                "Evento creado: " + savedEvent.getName(), null, eventToStateString(savedEvent));
+
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
+                "CREAR_EVENTO", "evento", savedEvent.getId().toString(),
+                null, eventToStateString(savedEvent)));
+
         return mapEventToResponse(savedEvent);
     }
 
@@ -119,6 +147,7 @@ public class EventServiceImpl implements IEventService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "eventos", key = "'published'")
     public List<EventResponse> getPublishedEvents() {
         return eventRepository.findByIsPublishedTrueAndIsActiveTrueOrderByEventDateTimeDesc()
                 .stream()
@@ -128,6 +157,7 @@ public class EventServiceImpl implements IEventService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "eventos", key = "'published_' + #category")
     public List<EventResponse> getPublishedEventsByCategory(String category) {
         return eventRepository.findByIsPublishedTrueAndCategoryOrderByEventDateTimeDesc(category)
                 .stream()
@@ -138,7 +168,7 @@ public class EventServiceImpl implements IEventService {
     @Override
     @Transactional(readOnly = true)
     public List<EventResponse> getUpcomingEvents() {
-        return eventRepository.findUpcomingEvents(LocalDateTime.now())
+        return eventRepository.findUpcomingEvents(OffsetDateTime.now())
                 .stream()
                 .map(this::mapEventToResponse)
                 .collect(Collectors.toList());
@@ -147,7 +177,7 @@ public class EventServiceImpl implements IEventService {
     @Override
     @Transactional(readOnly = true)
     public List<EventResponse> getUpcomingEventsByCategory(String category) {
-        return eventRepository.findUpcomingEventsByCategory(category, LocalDateTime.now())
+        return eventRepository.findUpcomingEventsByCategory(category, OffsetDateTime.now())
                 .stream()
                 .map(this::mapEventToResponse)
                 .collect(Collectors.toList());
@@ -155,13 +185,15 @@ public class EventServiceImpl implements IEventService {
 
     @Override
     @Transactional
-    public EventResponse updateEvent(UUID eventId, UUID organizerId, UpdateEventRequest request) {
+    public EventResponse updateEvent(UUID eventId, UUID organizerId, String userEmail, UpdateEventRequest request) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Evento no encontrado: " + eventId));
 
         if (!event.getOrganizerId().equals(organizerId)) {
             throw new RuntimeException("No tienes permiso para actualizar este evento");
         }
+
+        String prevState = eventToStateString(event);
 
         if (request.getName() != null) event.setName(request.getName());
         if (request.getDescription() != null) event.setDescription(request.getDescription());
@@ -179,7 +211,13 @@ public class EventServiceImpl implements IEventService {
         if (request.getSpotifyUrl() != null) event.setSpotifyUrl(request.getSpotifyUrl());
         if (request.getInstagramUrl() != null) event.setInstagramUrl(request.getInstagramUrl());
         if (request.getTwitterUrl() != null) event.setTwitterUrl(request.getTwitterUrl());
-        if (request.getIsPublished() != null) event.setIsPublished(request.getIsPublished());
+        if (request.getSocialLinks() != null) event.setSocialLinks(request.getSocialLinks());
+        if (request.getCity() != null) event.setCity(request.getCity());
+        if (request.getLocation() != null) event.setLocation(request.getLocation());
+        if (request.getIsPublished() != null) {
+            event.setIsPublished(request.getIsPublished());
+            event.setStatus(request.getIsPublished() ? "PUBLISHED" : "DRAFT");
+        }
 
         if (request.getTickets() != null && !request.getTickets().isEmpty()) {
             List<String> validationErrors = ticketValidator.validateTicketsForUpdate(
@@ -224,12 +262,41 @@ public class EventServiceImpl implements IEventService {
         }
 
         Event updatedEvent = eventRepository.save(event);
+        logEventChange(eventId, userEmail, "UPDATED",
+                "Evento actualizado: " + updatedEvent.getName(), prevState, eventToStateString(updatedEvent));
+
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
+                "MODIFICAR_EVENTO", "evento", eventId.toString(),
+                prevState, eventToStateString(updatedEvent)));
+
+        // Notificar a los usuarios que tienen boletas
+        StringBuilder detalleCambio = new StringBuilder();
+        if (request.getEventDateTime() != null) {
+            detalleCambio.append("Fecha modificada");
+        }
+        if (request.getVenueName() != null) {
+            if (detalleCambio.length() > 0) detalleCambio.append(" y ");
+            detalleCambio.append("Lugar modificado");
+        }
+        if (detalleCambio.length() == 0) {
+            detalleCambio.append("Información del evento actualizada");
+        }
+        String finalDetalle = detalleCambio.toString();
+
+        forEachTicketHolder(eventId, updatedEvent.getName(), "CHANGE", (firstTicket, placeholders) -> {
+            placeholders.put("evento", updatedEvent.getName());
+            placeholders.put("detalle_cambio", finalDetalle);
+            placeholders.put("nueva_fecha", updatedEvent.getEventDateTime() != null ? updatedEvent.getEventDateTime().toString() : "");
+            placeholders.put("nuevo_lugar", updatedEvent.getVenueName() != null ? updatedEvent.getVenueName() : "");
+        });
+
         return mapEventToResponse(updatedEvent);
+
     }
 
     @Override
     @Transactional
-    public void publishEvent(UUID eventId, UUID organizerId) {
+    public void publishEvent(UUID eventId, UUID organizerId, String userEmail) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Evento no encontrado: " + eventId));
 
@@ -242,13 +309,21 @@ public class EventServiceImpl implements IEventService {
             throw new RuntimeException("No se puede publicar el evento: " + String.join("; ", publishErrors));
         }
 
+        String prevState = eventToStateString(event);
         event.setIsPublished(true);
+        event.setStatus("PUBLISHED");
         eventRepository.save(event);
+        logEventChange(eventId, userEmail, "PUBLISHED",
+                "Evento publicado: " + event.getName(), prevState, eventToStateString(event));
+
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
+                "PUBLICAR_EVENTO", "evento", eventId.toString(),
+                prevState, eventToStateString(event)));
     }
 
     @Override
     @Transactional
-    public void unpublishEvent(UUID eventId, UUID organizerId) {
+    public void unpublishEvent(UUID eventId, UUID organizerId, String userEmail) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Evento no encontrado: " + eventId));
 
@@ -256,19 +331,57 @@ public class EventServiceImpl implements IEventService {
             throw new RuntimeException("No tienes permiso para despublicar este evento");
         }
 
+        String prevState = eventToStateString(event);
         event.setIsPublished(false);
+        event.setStatus("DRAFT");
         eventRepository.save(event);
+        logEventChange(eventId, userEmail, "UNPUBLISHED",
+                "Evento despublicado: " + event.getName(), prevState, eventToStateString(event));
+
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
+                "DESPUBLICAR_EVENTO", "evento", eventId.toString(),
+                prevState, eventToStateString(event)));
     }
 
     @Override
     @Transactional
-    public void deleteEvent(UUID eventId, UUID organizerId) {
+    public void deleteEvent(UUID eventId, UUID organizerId, String userEmail, String motivo) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Evento no encontrado: " + eventId));
 
         if (!event.getOrganizerId().equals(organizerId)) {
             throw new RuntimeException("No tienes permiso para eliminar este evento");
         }
+
+        String prevState = eventToStateString(event);
+        logEventChange(eventId, userEmail, "DELETED",
+                "Evento eliminado: " + event.getName(), prevState, null);
+
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
+                "ELIMINAR_EVENTO", "evento", eventId.toString(),
+                prevState, null));
+
+        // Notificar cancelacion a los compradores (antes de borrar)
+        if (motivo == null || motivo.isBlank()) {
+            motivo = "El evento ha sido cancelado por el organizador";
+        }
+        String finalMotivo = motivo;
+
+        forEachTicketHolder(eventId, event.getName(), "CANCELLATION", (firstTicket, placeholders) -> {
+            String total = firstTicket.get("total") instanceof String t ? t : "";
+            if (total.isBlank()) {
+                Object priceObj = firstTicket.get("unitPrice");
+                Object qtyObj = firstTicket.get("quantity");
+                if (priceObj != null && qtyObj != null) {
+                    total = String.valueOf(Double.parseDouble(String.valueOf(priceObj)) * Integer.parseInt(String.valueOf(qtyObj)));
+                }
+            }
+
+            placeholders.put("evento", event.getName());
+            placeholders.put("fecha", event.getEventDateTime() != null ? event.getEventDateTime().toString() : "");
+            placeholders.put("motivo", finalMotivo);
+            placeholders.put("total", total);
+        });
 
         List<Ticket> tickets = ticketRepository.findByEventId(eventId);
         for (Ticket ticket : tickets) {
@@ -281,7 +394,7 @@ public class EventServiceImpl implements IEventService {
 
     @Override
     @Transactional
-    public void deactivateEvent(UUID eventId, UUID organizerId) {
+    public void deactivateEvent(UUID eventId, UUID organizerId, String userEmail) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Evento no encontrado: " + eventId));
 
@@ -289,8 +402,16 @@ public class EventServiceImpl implements IEventService {
             throw new RuntimeException("No tienes permiso para desactivar este evento");
         }
 
+        String prevState = eventToStateString(event);
         event.setIsActive(false);
+        event.setStatus("DEACTIVATED");
         eventRepository.save(event);
+        logEventChange(eventId, userEmail, "DEACTIVATED",
+                "Evento desactivado: " + event.getName(), prevState, eventToStateString(event));
+
+        auditEventClient.logEvent(new AuditEventRequest("events", null, null,
+                "DESACTIVAR_EVENTO", "evento", eventId.toString(),
+                prevState, eventToStateString(event)));
     }
 
     @Override
@@ -315,6 +436,39 @@ public class EventServiceImpl implements IEventService {
                 ticketTypes,
                 tickets.stream().anyMatch(t -> t.getCapacity() - t.getSoldCount() <= 0)
         );
+    }
+
+    @Scheduled(fixedRate = 3600000)
+    public void sendEventReminders() {
+        try {
+            OffsetDateTime now = OffsetDateTime.now();
+            OffsetDateTime start = now;
+            OffsetDateTime end = now.plusHours(24);
+
+            List<Event> events = eventRepository.findEventsBetweenForReminder(start, end);
+            if (events.isEmpty()) return;
+
+            for (Event event : events) {
+                try {
+                    forEachTicketHolder(event.getId(), event.getName(), "REMINDER", (firstTicket, placeholders) -> {
+                        placeholders.put("evento", event.getName());
+                        placeholders.put("fecha", event.getEventDateTime() != null ? event.getEventDateTime().toString() : "");
+                        placeholders.put("hora", event.getEventDateTime() != null ? event.getEventDateTime().toLocalTime().toString() : "");
+                        placeholders.put("lugar", event.getVenueName() != null ? event.getVenueName() : "");
+                        placeholders.put("codigo_qr", "");
+                    });
+
+                    event.setReminderSent(true);
+                    eventRepository.save(event);
+                } catch (Exception e) {
+                    org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
+                        .error("Failed to process reminder for event {}: {}", event.getId(), e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
+                .error("Failed to send event reminders: {}", e.getMessage());
+        }
     }
 
     private EventResponse mapEventToResponse(Event event) {
@@ -367,6 +521,10 @@ public class EventServiceImpl implements IEventService {
         response.setSpotifyUrl(event.getSpotifyUrl());
         response.setInstagramUrl(event.getInstagramUrl());
         response.setTwitterUrl(event.getTwitterUrl());
+        response.setSocialLinks(event.getSocialLinks());
+        response.setCity(event.getCity());
+        response.setLocation(event.getLocation());
+        response.setStatus(event.getStatus());
         response.setIsPublished(event.getIsPublished());
         response.setIsActive(event.getIsActive());
         response.setCreatedAt(event.getCreatedAt());
@@ -374,6 +532,60 @@ public class EventServiceImpl implements IEventService {
         response.setTickets(ticketResponses);
 
         return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EventHistory> getEventHistory(UUID eventId) {
+        return historyRepository.findByEventIdOrderByCreatedAtDesc(eventId);
+    }
+
+    private void logEventChange(UUID eventId, String userEmail, String action, String description, String previousState, String newState) {
+        EventHistory history = new EventHistory();
+        history.setEventId(eventId);
+        history.setUserEmail(userEmail);
+        history.setAction(action);
+        history.setDescription(description);
+        history.setPreviousState(previousState);
+        history.setNewState(newState);
+        historyRepository.save(history);
+    }
+
+    private String eventToStateString(Event event) {
+        return String.format("name=%s, category=%s, date=%s, venue=%s, published=%s, active=%s",
+                event.getName(), event.getCategory(), event.getEventDateTime(),
+                event.getVenueName(), event.getIsPublished(), event.getIsActive());
+    }
+
+    private void forEachTicketHolder(UUID eventId, String eventName, String eventType,
+            java.util.function.BiConsumer<Map<String, Object>, Map<String, String>> placeholderFill) {
+        try {
+            java.util.List<Map<String, Object>> issuedTickets = ticketsClient.getIssuedTicketsByEvent(eventId);
+            if (issuedTickets == null || issuedTickets.isEmpty()) return;
+
+            java.util.Map<Object, java.util.List<Map<String, Object>>> ticketsByOrder =
+                issuedTickets.stream().collect(java.util.stream.Collectors.groupingBy(t -> t.get("orderId")));
+
+            for (java.util.List<Map<String, Object>> orderTickets : ticketsByOrder.values()) {
+                Map<String, Object> firstTicket = orderTickets.get(0);
+                Object userIdObj = firstTicket.get("userId");
+                if (userIdObj == null) continue;
+
+                UUID userId = UUID.fromString(String.valueOf(userIdObj));
+                String holderEmail = (String) firstTicket.get("holderEmail");
+                String holderName = firstTicket.get("holderName") instanceof String hn ? hn : (holderEmail != null ? holderEmail : "");
+                if (holderEmail == null) holderEmail = "";
+
+                Map<String, String> placeholders = new java.util.HashMap<>();
+                placeholders.put("nombre", holderName);
+                placeholderFill.accept(firstTicket, placeholders);
+
+                notificationsClient.sendNotification(userId, holderEmail, eventType, "EMAIL", placeholders);
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(EventServiceImpl.class)
+                .error("Failed to send {} notifications for event {}: {}", eventType, eventName, e.getMessage());
+        }
     }
 
     public record EventSummary(

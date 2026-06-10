@@ -3,12 +3,13 @@ package co.empresa.vivaeventos.events.delivery.rest;
 import co.empresa.vivaeventos.events.domain.model.dto.CreateEventRequest;
 import co.empresa.vivaeventos.events.domain.model.dto.EventResponse;
 import co.empresa.vivaeventos.events.domain.model.dto.UpdateEventRequest;
+import co.empresa.vivaeventos.events.domain.model.EventHistory;
 import co.empresa.vivaeventos.events.domain.service.EventServiceImpl;
 import co.empresa.vivaeventos.events.domain.service.IEventService;
+import co.empresa.vivaeventos.events.domain.service.ITicketService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -21,9 +22,11 @@ import java.util.UUID;
 public class EventController {
 
     private final IEventService eventService;
+    private final ITicketService ticketService;
 
-    public EventController(IEventService eventService) {
+    public EventController(IEventService eventService, ITicketService ticketService) {
         this.eventService = eventService;
+        this.ticketService = ticketService;
     }
 
   /*  @PostMapping
@@ -49,13 +52,21 @@ public class EventController {
     }*/
     @PostMapping
     public ResponseEntity<Map<String, Object>> createEvent(
-            @Valid @RequestBody CreateEventRequest request) {
+            @Valid @RequestBody CreateEventRequest request,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
 
         try {
-            UUID orgId = UUID.randomUUID();
+            UUID orgId = request.getOrganizerId();
+            if (orgId == null) {
+                if (userEmail != null) {
+                    orgId = UUID.nameUUIDFromBytes(userEmail.getBytes());
+                } else {
+                    orgId = UUID.randomUUID();
+                }
+            }
 
             EventResponse eventResponse =
-                    eventService.createEvent(orgId, request);
+                    eventService.createEvent(orgId, userEmail, request);
 
             Map<String, Object> response = new HashMap<>();
             response.put("mensaje", "Evento creado exitosamente");
@@ -156,13 +167,20 @@ public class EventController {
 
     @PutMapping("/{eventId}")
     public ResponseEntity<Map<String, Object>> updateEvent(
-            Authentication authentication,
             @PathVariable UUID eventId,
-            @Valid @RequestBody UpdateEventRequest request) {
+            @Valid @RequestBody UpdateEventRequest request,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
         try {
-            UUID organizerId = UUID.fromString(extractUserIdFromToken(authentication));
+            UUID organizerId = request.getOrganizerId();
+            if (organizerId == null) {
+                if (userEmail != null) {
+                    organizerId = UUID.nameUUIDFromBytes(userEmail.getBytes());
+                } else {
+                    organizerId = UUID.randomUUID();
+                }
+            }
 
-            EventResponse eventResponse = eventService.updateEvent(eventId, organizerId, request);
+            EventResponse eventResponse = eventService.updateEvent(eventId, organizerId, userEmail, request);
 
             Map<String, Object> response = new HashMap<>();
             response.put("mensaje", "Evento actualizado exitosamente");
@@ -178,12 +196,13 @@ public class EventController {
 
     @PostMapping("/{eventId}/publish")
     public ResponseEntity<Map<String, Object>> publishEvent(
-            Authentication authentication,
-            @PathVariable UUID eventId) {
+            @PathVariable UUID eventId,
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
         try {
-            UUID organizerId = UUID.fromString(extractUserIdFromToken(authentication));
+            UUID organizerId = extractOrganizerId(body, userEmail);
 
-            eventService.publishEvent(eventId, organizerId);
+            eventService.publishEvent(eventId, organizerId, userEmail);
 
             Map<String, Object> response = new HashMap<>();
             response.put("mensaje", "Evento publicado exitosamente");
@@ -198,12 +217,13 @@ public class EventController {
 
     @PostMapping("/{eventId}/unpublish")
     public ResponseEntity<Map<String, Object>> unpublishEvent(
-            Authentication authentication,
-            @PathVariable UUID eventId) {
+            @PathVariable UUID eventId,
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
         try {
-            UUID organizerId = UUID.fromString(extractUserIdFromToken(authentication));
+            UUID organizerId = extractOrganizerId(body, userEmail);
 
-            eventService.unpublishEvent(eventId, organizerId);
+            eventService.unpublishEvent(eventId, organizerId, userEmail);
 
             Map<String, Object> response = new HashMap<>();
             response.put("mensaje", "Evento despublicado exitosamente");
@@ -218,12 +238,13 @@ public class EventController {
 
     @PostMapping("/{eventId}/deactivate")
     public ResponseEntity<Map<String, Object>> deactivateEvent(
-            Authentication authentication,
-            @PathVariable UUID eventId) {
+            @PathVariable UUID eventId,
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
         try {
-            UUID organizerId = UUID.fromString(extractUserIdFromToken(authentication));
+            UUID organizerId = extractOrganizerId(body, userEmail);
 
-            eventService.deactivateEvent(eventId, organizerId);
+            eventService.deactivateEvent(eventId, organizerId, userEmail);
 
             Map<String, Object> response = new HashMap<>();
             response.put("mensaje", "Evento desactivado exitosamente");
@@ -236,14 +257,16 @@ public class EventController {
         }
     }
 
-    @DeleteMapping("/{eventId}")
+    @PostMapping("/{eventId}/delete")
     public ResponseEntity<Map<String, Object>> deleteEvent(
-            Authentication authentication,
-            @PathVariable UUID eventId) {
+            @PathVariable UUID eventId,
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail) {
         try {
-            UUID organizerId = UUID.fromString(extractUserIdFromToken(authentication));
+            UUID organizerId = extractOrganizerId(body, userEmail);
+            String motivo = body.get("motivo") instanceof String s ? s : null;
 
-            eventService.deleteEvent(eventId, organizerId);
+            eventService.deleteEvent(eventId, organizerId, userEmail, motivo);
 
             Map<String, Object> response = new HashMap<>();
             response.put("mensaje", "Evento eliminado exitosamente");
@@ -272,16 +295,46 @@ public class EventController {
         }
     }
 
-    private String extractUserIdFromToken(Authentication authentication) {
-        // Extraer el ID del usuario desde el token JWT
-        // Este método debería ser implementado según tu JWT structure
-        // Por ahora, usamos el nombre de usuario como fallback
-        Object principal = authentication.getPrincipal();
-        if (principal instanceof org.springframework.security.core.userdetails.UserDetails) {
-            // Aquí deberías extraer el ID real del token
-            // Esto es un placeholder
-            return "00000000-0000-0000-0000-000000000000";
+    @PostMapping("/tickets/{ticketId}/vender")
+    public ResponseEntity<Map<String, Object>> incrementTicketSales(
+            @PathVariable UUID ticketId,
+            @RequestBody Map<String, Integer> body) {
+        try {
+            int quantity = body.getOrDefault("cantidad", 1);
+            ticketService.incrementSoldCount(ticketId, quantity);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("mensaje", "Venta registrada exitosamente");
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         }
-        return "00000000-0000-0000-0000-000000000000";
     }
+
+    @GetMapping("/{eventId}/history")
+    public ResponseEntity<Map<String, Object>> getEventHistory(@PathVariable UUID eventId) {
+        try {
+            List<EventHistory> history = eventService.getEventHistory(eventId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("history", history);
+            response.put("total", history.size());
+
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+        }
+    }
+
+    private UUID extractOrganizerId(Map<String, Object> body, String userEmail) {
+        if (body != null && body.containsKey("organizerId") && body.get("organizerId") != null) {
+            return UUID.fromString(body.get("organizerId").toString());
+        }
+        return userEmail != null ? UUID.nameUUIDFromBytes(userEmail.getBytes()) : UUID.randomUUID();
+    }
+
 }
