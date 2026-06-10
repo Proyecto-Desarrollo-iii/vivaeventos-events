@@ -1,8 +1,8 @@
 package co.empresa.vivaeventos.events.domain.service;
 
-import co.empresa.vivaeventos.events.domain.model.Dto.CreateEventRequest;
-import co.empresa.vivaeventos.events.domain.model.Dto.EventResponse;
-import co.empresa.vivaeventos.events.domain.model.Dto.UpdateEventRequest;
+import co.empresa.vivaeventos.events.domain.model.dto.CreateEventRequest;
+import co.empresa.vivaeventos.events.domain.model.dto.EventResponse;
+import co.empresa.vivaeventos.events.domain.model.dto.UpdateEventRequest;
 
 import java.util.List;
 import java.util.UUID;
